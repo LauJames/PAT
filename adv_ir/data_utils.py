@@ -9,29 +9,30 @@ prodir = os.path.dirname(curdir)
 import pandas as pd
 import pickle as pkl
 
-ranker_results_dir = prodir + '/bert_ranker/results/runs'
 mspr_data_folder = prodir + '/data/msmarco_passage'
+ranker_results_dir = prodir + '/bert_ranker/results/runs'
 trec_dl_data_folder = prodir + '/data/trec_dl_2019'
 
 
-def pick_target_query_doc_and_best_scores(experiment_name='pointwise',
-                                          data_name='mspr',
+def pick_target_query_doc_and_best_scores(target_name='pointwise',
+                                          data_name='dl',
                                           top_k=10,
-                                          least_num=100):
-
+                                          least_num=10):
     if data_name == 'dl':
-        if experiment_name == 'pairwise.v2':
-            run_file = ranker_results_dir + '/runs.bert-base-uncased.pairwise.triples.dl2019_imitation_miniLM_further_train.csv'
-        elif experiment_name == 'pairwise.v1':
-            run_file = ranker_results_dir + '/runs.bert-base-uncased.pairwise.triples.dl2019_imitation_bert_large_further_train.csv'
-        elif experiment_name == 'pairwise.pseudo':
+        if target_name == 'imitate.v2':
+            run_file = ranker_results_dir + '/runs.bert-base-uncased.pairwise.triples.dl2019_imitation_MiniLM.csv'
+        elif target_name == 'imitate.v1':
+            run_file = ranker_results_dir + '/runs.bert-base-uncased.pairwise.triples.dl2019_imitation_bert_large.csv'
+        elif target_name == 'pairwise.pseudo':
             run_file = ranker_results_dir + '/runs/runs.bert-base-uncased.pairwise.triples.pseudo.csv'
-        elif experiment_name == 'ms-marco-MiniLM-L-12-v2':
-            run_file = ranker_results_dir + '/runs.ms-marco-MiniLM-L-12-v2.public.bert.msmarco.dl2019.csv'
-        elif experiment_name == 'bert-large-uncased':
-            run_file = ranker_results_dir + '/runs.bert-large-uncased.public.bert.msmarco.dl2019.csv'
-        elif experiment_name == 'pairwise.wo.imitation':
+        elif target_name == 'pairwise.wo.imitation':
             run_file = ranker_results_dir + '/runs.bert-base-uncased.pairwise.triples.dl2019.csv'
+        elif target_name == 'pointwise':
+            run_file = ranker_results_dir + '/runs.bert-base-uncased.pointwise.triples.2M.dl2019.csv'
+        elif target_name == 'mini':
+            run_file = ranker_results_dir + '/runs.ms-marco-MiniLM-L-12-v2.public.bert.msmarco.dl2019.csv'
+        elif target_name == 'large':
+            run_file = ranker_results_dir + '/runs.bert-large-uncased.public.bert.msmarco.dl2019.csv'
         else:
             raise ValueError("Experiment name Error!")
     else:
@@ -41,7 +42,6 @@ def pick_target_query_doc_and_best_scores(experiment_name='pointwise',
     query_scores = defaultdict(list)
     target_q_pid = defaultdict(dict)
     all_qid_pid_dict = defaultdict(list)
-    # get q - passage,rank,score
     with open(run_file) as f:
         for line in f:
             qid, _, pid, rank, score, _ = line.strip().split('\t')
@@ -74,25 +74,24 @@ def pick_target_query_doc_and_best_scores(experiment_name='pointwise',
     return target_q_pid, query_scores, best_query_score, all_qid_pid_dict
 
 
-def prepare_data_and_scores(experiment_name='pairwise.pseudo',
-                            data_name='mspr',
+def prepare_data_and_scores(target_name='mini',
+                            data_name='dl',
                             mode='',
                             top_k=10,
                             least_num=10):
-    target_q_pid, query_scores, best_query_score, all_qid_pid_dict = pick_target_query_doc_and_best_scores(
-        experiment_name, data_name, top_k, least_num)
     if data_name == 'dl':
-        # pid, passage_text
         collection_path = mspr_data_folder + '/collection.tsv'
         queries_path = trec_dl_data_folder + '/msmarco-test2019-queries.tsv'
-        if mode == 'test' and 'pseudo' not in experiment_name:
-            preprocessed_pkl_path = curdir + '/tmp_data/{}.{}.test.pkl'.format(data_name, experiment_name)
+        if mode == 'test' and 'pseudo' not in target_name:
+            preprocessed_pkl_path = curdir + '/tmp_data/{}.{}.test.pkl'.format(data_name, target_name)
         else:
-            preprocessed_pkl_path = curdir + '/tmp_data/{}.{}.pkl'.format(data_name, experiment_name)
+            preprocessed_pkl_path = curdir + '/tmp_data/{}.{}.pkl'.format(data_name, target_name)
     else:
         raise ValueError("Error data name!")
 
     if not os.path.exists(preprocessed_pkl_path):
+        target_q_pid, query_scores, best_query_score, all_qid_pid_dict = pick_target_query_doc_and_best_scores(
+            target_name, data_name, top_k, least_num)
         print("{} does not exist, creating it...".format(preprocessed_pkl_path))
         # load doc_id=pid to string
         collection_df = pd.read_csv(collection_path, sep='\t', names=['docid', 'document_string'])
@@ -138,7 +137,7 @@ def prepare_data_and_scores(experiment_name='pairwise.pseudo',
 
 def get_query_passage_by_qid_rank(qid, rank):
     target_q_passage, query_scores, best_query_sent, queries, passages_dict = prepare_data_and_scores(
-        experiment_name='pairwise.v2',
+        target_name='pairwise.v2',
         data_name='dl',
         top_k=10,
         least_num=10)
@@ -153,7 +152,7 @@ def get_query_passage_by_qid_rank(qid, rank):
 
 
 if __name__ == "__main__":
-    prepare_data_and_scores(experiment_name='pairwise.v2', data_name='dl', top_k=10, least_num=50)
+    prepare_data_and_scores(target_name='pairwise.v2', data_name='dl', top_k=10, least_num=10)
 
 
 

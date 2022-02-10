@@ -14,7 +14,6 @@ sampled_triples_path = prodir + '/data/msmarco_passage/triples_from_runs'
 runs_data_folder = prodir + '/bert_ranker/results/runs'
 
 runs_bert_large = runs_data_folder + '/runs.bert-large-uncased.public.bert.msmarco.eval_full_dev1000.csv'
-runs_distilbert_cat = runs_data_folder + '/runs.distilbert-cat-margin_mse-T2-msmarco.public.bert.msmarco.eval_full_dev1000.csv'
 runs_MiniLM_L_12 = runs_data_folder + '/runs.ms-marco-MiniLM-L-12-v2.public.bert.msmarco.eval_full_dev1000.csv'
 
 random_seed = 777
@@ -26,7 +25,6 @@ def sample_from_dev_runs(run_path, save_pre_fix, top_n=20, last_sample=10):
     with open(run_path, 'r') as f:
         for line in f:
             qid, _, did, _, _, _ = line.strip().split('\t')
-            # qid, did, _ = line.strip().split('\t')
             relevant_pairs_dict[qid].append(did)
 
     sampled_triples_ids = []

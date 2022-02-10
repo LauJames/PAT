@@ -6,6 +6,7 @@ sys.path.insert(0, os.path.dirname(curdir))
 prodir = os.path.dirname(os.path.dirname(curdir))
 sys.path.insert(0, prodir)
 
+import numpy as np
 import pandas as pd
 import pickle as pkl
 from tqdm import tqdm
@@ -15,14 +16,20 @@ from transformers import BertTokenizerFast
 
 
 class Imitation_Dataset(object):
-    def __init__(self, tokenizer, random_seed=666):
+    def __init__(self, tokenizer, random_seed=666, sample_config_tail='top_20_last_10'):
         self.tokenizer = tokenizer
         self.random_seed = random_seed
         self.ms_folder_name = prodir + '/data/msmarco_passage'
         self.triples_from_runs_folder = self.ms_folder_name + '/triples_from_runs'
-        self.triples_from_runs_bert_large = self.triples_from_runs_folder + '/bert_large_sampled_triples_text.top_20_last_10.csv'
-        self.triples_from_runs_distilbert_cat = self.triples_from_runs_folder + '/distilbert_cat_sampled_triples_text.top_20_last_10.csv'
-        self.triples_from_runs_minilm_l12_v2 = self.triples_from_runs_folder + '/minilm_l12_sampled_triples_text.top_20_last_10.csv'
+        self.triples_from_runs_338_path = self.triples_from_runs_folder + '/tmp_runs_sampled_triples_text.csv'
+
+        self.sample_config_tail = sample_config_tail
+
+        self.triples_from_runs_bert_large = self.triples_from_runs_folder + '/bert_large_sampled_triples_text.{}.csv'.format(
+            self.sample_config_tail)
+
+        self.triples_from_runs_minilm_l12_v2 = self.triples_from_runs_folder + '/minilm_l12_sampled_triples_text.{}.csv'.format(
+            self.sample_config_tail)
 
         self.dev_sub_small_path = self.ms_folder_name + "/sampled_set/run_sub_small.dev.pkl"
         self.dev_top1000_full_path = self.ms_folder_name + "/sampled_set/run_bm25.dev.pkl"
@@ -31,15 +38,14 @@ class Imitation_Dataset(object):
         self.test_trec_mb_2014_path = prodir + '/data/trec_mb_2014/trec_mb_2014.pkl'
 
     def _load_from_triples_to_pairwise(self):
-        pkl_path = self.ms_folder_name + '/triples_from_runs/bert_large_sampled_triples_text.top_20_last_10.pkl'
-        # pkl_path = self.ms_folder_name + '/triples_from_runs/distilbert_cat_sampled_triples_text.top_20_last_10.pkl'
-        # pkl_path = self.ms_folder_name + '/triples_from_runs/minilm_l12_sampled_triples_text.top_20_last_10.pkl'
-        # pkl_path = self.ms_folder_name + '/triples_from_runs/bert_large_sampled_triples_text.top_20_last_10.pkl'
+        pkl_path = self.ms_folder_name + '/triples_from_runs/minilm_l12_sampled_triples_text.{}.pkl'.format(
+            self.sample_config_tail)
+        # pkl_path = self.ms_folder_name + '/triples_from_runs/bert_large_sampled_triples_text.{}.pkl'.format(self.sample_config_tail)
         print("Load data from {}".format(pkl_path))
         if not os.path.exists(pkl_path):
-            print("{} not exists.\n Load pairwise sample from the {} ...".format(pkl_path,
-                                                                                 self.triples_from_runs_bert_large))
-            train_df = pd.read_csv(self.triples_from_runs_bert_large, sep='\t', names=["query", "pos", "neg"])
+            triples_from_runs = self.triples_from_runs_minilm_l12_v2
+            print("{} not exists.\n Load pairwise sample from the {} ...".format(pkl_path, triples_from_runs))
+            train_df = pd.read_csv(triples_from_runs, sep='\t', names=["query", "pos", "neg"])
             train_instances = []
             train_labels = []
             for _, rows in tqdm(train_df.iterrows(), total=len(train_df)):
@@ -60,7 +66,7 @@ class Imitation_Dataset(object):
         print("Total of {} instances are loaded.".format(len(train_labels)))
         return train_instances, train_labels
 
-    def data_generator_pairwise_triple(self, mode='train', epoch_sample_num=None, random_seed=666, batch_size=32,
+    def data_generator_pairwise_triple(self, mode='train', random_seed=666, batch_size=32,
                                        max_seq_len=128):
         if mode == 'train':
             examples, labels = self._load_from_triples_to_pairwise()
@@ -117,6 +123,7 @@ class Imitation_Dataset(object):
             batch_encoding_pos = self.tokenizer([(e[0], e[1]) for e in tmp_examples],
                                                 max_length=max_seq_len, padding="max_length", truncation=True,
                                                 return_tensors='pt')
+
             yield batch_encoding_pos, tmp_labels, tmp_qids, tmp_pids
 
 

@@ -5,11 +5,10 @@ curdir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(curdir))
 prodir = os.path.dirname(curdir)
 
-
 import time
 import pandas as pd
 import numpy as np
-from transformers import BertTokenizerFast, BertConfig
+from transformers import BertTokenizerFast
 from bert_ranker.models import pairwise_bert
 from bert_ranker.dataloader.dataset import MSMARCO_PR_Pair_Dataset
 import bert_ranker_utils
@@ -25,14 +24,14 @@ def main():
     # Input and output configs
     parser.add_argument("--output_dir", default=curdir + '/results', type=str,
                         help="the folder to output predictions")
-    parser.add_argument("--mode", default='dl2019', type=str,
-                        help="eval_full_dev1000/eval_pseudo_full_dev1000/dl2019")
+    parser.add_argument("--mode", default='dl2019_imitation', type=str,
+                        help="eval_full_dev1000/eval_full_dev1000_imitation/dl2019/dl2019_imitation")
 
     # Training procedure
     parser.add_argument("--seed", default=42, type=str,
                         help="random seed")
 
-    parser.add_argument("--val_batch_size", default=512, type=int,
+    parser.add_argument("--val_batch_size", default=64, type=int,
                         help="Validation and test batch size.")
 
     # Model hyperparameters
@@ -42,7 +41,7 @@ def main():
                         help="Maximum sequence length for the inputs.")
     parser.add_argument("--lr", default=1e-6, type=float, required=False,
                         help="Learning rate.")
-    parser.add_argument("--max_grad_norm", default=3, type=float, required=False,
+    parser.add_argument("--max_grad_norm", default=1, type=float, required=False,
                         help="Max gradient normalization.")
     parser.add_argument("--accumulation_steps", default=1, type=float, required=False,
                         help="gradient accumulation.")
@@ -59,7 +58,7 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     now_time = '_'.join(time.asctime(time.localtime(time.time())).split()[:3])
-    args.run_id = args.transformer_model + '.pairwise.triples.' + now_time
+    args.run_id = args.transformer_model + '.pairwise.triples'
     output_dir = curdir + '/results'
 
     torch.manual_seed(args.seed)
@@ -74,16 +73,21 @@ def main():
 
     data_obj = MSMARCO_PR_Pair_Dataset(tokenizer=tokenizer)
 
-    if args.mode in ['eval_pseudo_full_dev1000', 'eval_pseudo_subsmall', 'pseudo_pseudo', 'dl2019_pseudo',
-                     'mb2014_pseudo']:
-        model_path = curdir + '/saved_models/' + model.__class__.__name__ + '.pseudo.' + args.transformer_model + '.pth'
-    elif args.mode in ['eval_full_dev1000_same_pseudo', 'dl2019_same_pseudo', 'mb2014_same_pseudo']:
-        model_path = curdir + '/saved_models/' + model.__class__.__name__ + '.pseudo.same.' + args.transformer_model + '.pth'
-    elif args.mode in ['eval_full_dev1000_imitation', 'dl2019_imitation', 'mb2014_imitation',
-                       'eval_subsmall_imitation']:
-        # model_path = curdir + '/saved_models/Imitation.distilbert.cat.further_train.' + model.__class__.__name__ + '.' + args.transformer_model + '.pth'
-        # model_path = curdir + '/saved_models/Imitation.MiniLM.L12.v2.' + model.__class__.__name__ + '.' + args.transformer_model + '.pth'
-        model_path = curdir + '/saved_models/Imitation.straight.MiniLM.' + model.__class__.__name__ + '.' + args.transformer_model + '.pth'
+    if args.mode in ['eval_full_dev1000_imitation', 'dl2019_imitation', 'mb2014_imitation',
+                     'eval_subsmall_imitation']:
+        # sample_config_tail = 'top_15_last_19'
+        sample_config_tail = 'top_20_last_10'
+        # sample_config_tail = 'top_25_last_4'
+        # sample_config_tail = 'top_15_last_59'
+        # sample_config_tail = 'top_20_last_40'
+        # sample_config_tail = 'top_25_last_28'
+        # imitate_model_name = 'MiniLM'
+        imitate_model_name = 'large'
+
+        zero_or_warm = 'further'
+        # zero_or_warm = 'straight'
+
+        model_path = curdir + '/saved_models/Imitation.' + imitate_model_name + '.' + zero_or_warm + '.' + model.__class__.__name__ + '.' + sample_config_tail + '.' + args.transformer_model + '.pth'
     else:
         model_path = curdir + '/saved_models/' + model.__class__.__name__ + '.' + args.transformer_model + '.pth'
 
@@ -142,7 +146,7 @@ def main():
         all_softmax_logits, _ = bert_ranker_utils.accumulate_list_by_qid(all_softmax_logits, all_qids)
         all_pids, all_qids = bert_ranker_utils.accumulate_list_by_qid(all_pids, all_qids)
 
-        res = metrics.evaluate_and_aggregate(all_logits, all_labels, ['ndcg_cut_10', 'map', 'recip_rank', 'MRR@10'])
+        res = metrics.evaluate_and_aggregate(all_logits, all_labels, ['ndcg_cut_10', 'map', 'recip_rank'])
         for metric, v in res.items():
             print("\n{} {} : {:3f}".format(args.mode, metric, v))
 
@@ -172,8 +176,8 @@ def main():
                 for rank, (t_qid, t_pid) in enumerate(zip(top_qids, top_pids)):
                     run_list.append((t_qid, t_pid, rank + 1))
             run_df = pd.DataFrame(run_list, columns=["qid", "pid", "rank"])
-            run_df.to_csv(output_dir + "/run." + args.run_id + '.' + args.mode + ".csv", sep='\t', index=False,
-                          header=False)
+            run_df.to_csv(output_dir + "/run." + args.run_id + '.' + args.mode + '_' + imitate_model_name + ".csv",
+                          sep='\t', index=False, header=False)
 
             # For TREC eval
             runs_list = []
@@ -185,8 +189,9 @@ def main():
                 for rank, (t_qid, t_pid, t_score) in enumerate(zip(sorted_qids, sorted_pids, sorted_scores)):
                     runs_list.append((t_qid, 'Q0', t_pid, rank + 1, t_score, 'BERT-Pair'))
             runs_df = pd.DataFrame(runs_list, columns=["qid", "Q0", "pid", "rank", "score", "runid"])
-            runs_df.to_csv(output_dir + '/runs/runs.' + args.run_id + '.' + args.mode + '.csv', sep='\t', index=False,
-                           header=False)
+            runs_df.to_csv(
+                output_dir + '/runs/runs.' + args.run_id + '.' + args.mode + '_' + imitate_model_name + '.csv', sep='\t'
+                , index=False, header=False)
 
 
 if __name__ == "__main__":

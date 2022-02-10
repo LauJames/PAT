@@ -1,7 +1,3 @@
-"""
-Single Query Attack method target imitation ranker on MSMARCO Passage Ranking
-Using the generate triggers to test its transferability
-"""
 import sys
 import os
 
@@ -20,15 +16,16 @@ import bisect
 from tqdm import tqdm
 from torch import cuda
 
-
-from transformers import BertTokenizer, BertTokenizerFast, BertForNextSentencePrediction
+from transformers import BertTokenizerFast, BertForNextSentencePrediction, \
+    AutoModelForSequenceClassification
+from transformers import AutoTokenizer
 from bert_ranker.models import pairwise_bert
 from bert_ranker.models.bert_lm import BertForLM
 from apex import amp
 from attack_methods import gen_adversarial_trigger_pair_passage
 from data_utils import prepare_data_and_scores
 
-device = 'cuda:0' if cuda.is_available() else 'cpu'
+device = 'cuda' if cuda.is_available() else 'cpu'
 
 
 def main():
@@ -36,32 +33,29 @@ def main():
 
     parser.add_argument('--verbose', default=True, type=bool,
                         help='Print every iteration')
-    parser.add_argument('--mode', default='train', type=str,
-                        help='train/transfer')
+    parser.add_argument('--mode', default='test', type=str,
+                        help='train/test')
 
     # target known model config
-    parser.add_argument("--experiment_name", default='pairwise.v1', type=str)
+    parser.add_argument("--experiment_name", default='imitate.v2', type=str)
     parser.add_argument("--data_name", default="dl", type=str)
     parser.add_argument("--transformer_model", default="bert-base-uncased", type=str, required=False,
                         help="Bert model to use (default = bert-base-cased).")
-    parser.add_argument("--max_seq_len", default=256, type=int, required=False,
-                        help="Maximum sequence length for the inputs.")
     parser.add_argument("--tri_len", default=8, type=int, help="Maximun trigger length for generation.")
-    parser.add_argument("--topk", default=50, type=int, help="Top k sampling for beam search")
+    parser.add_argument("--topk", default=15, type=int, help="Top k sampling for beam search")
     parser.add_argument('--max_iter', type=int, default=20, help='maximum iteraiton')
-    parser.add_argument("--beta", default=0.6, type=float, help="Coefficient for language model loss.")
-    parser.add_argument("--gamma", default=100., type=float, help="Coefficient for NSP model loss.")
+    parser.add_argument("--lamb", default=0., type=float, help="Coefficient for language model loss.")
     parser.add_argument('--stemp', type=float, default=1.0, help='temperature of softmax')
-    parser.add_argument('--repetition_penalty', type=float, default=1.0, help='penalty of repetition')
     parser.add_argument('--lr', type=float, default=0.0075, help='optimization step size')
     parser.add_argument("--num_beams", default=5, type=int, help="Number of beams")
-    parser.add_argument("--num_filters", default=10, type=int, help="Number of num_filters words to be filtered")
-    parser.add_argument('--perturb_iter', type=int, default=30, help='PPLM iteration')
-    parser.add_argument('--patience_limit', type=int, default=2, help="Patience for early stopping.")
-    parser.add_argument('--eps', type=float, default=0.1)
-    parser.add_argument("--seed", default=666, type=str, help="random seed")
-    parser.add_argument('--regularize', default=False, type=bool, help='Use regularize to decrease perplexity')
-    parser.add_argument("--fp16", default=True, type=bool, help="Whether to use apex to accelerate.")
+    parser.add_argument("--num_top_words", default=200, type=int, help="Number of similar words")
+    parser.add_argument('--var_iter', type=int, default=30, help='iteration for mapping variable z')
+    parser.add_argument('--patience_limit', type=int, default=1, help="Patience for early stopping.")
+    parser.add_argument('--smoothing_rate', type=float, default=0.3)
+    parser.add_argument("--seed", default=66, type=str, help="random seed")
+    parser.add_argument("--lm_model_dir", default=prodir + '/data/wiki103/bert', type=str,
+                        help="Path to pre-trained language model")
+    parser.add_argument("--target", type=str, default='mini', help='test on what model')
 
     args = parser.parse_args()
 
@@ -73,8 +67,8 @@ def main():
     if not os.path.exists(log_dir):
         os.mkdir(log_dir)
     now_time = '_'.join(time.asctime(time.localtime(time.time())).split()[:3])
-    log_path = log_dir + '/attack.{}.mspr.spec.lm_{}.nsp_{}.{}.log'.format(args.experiment_name, args.beta, args.gamma,
-                                                                           now_time)
+    log_path = log_dir + '/attack.{}_on_{}.cons_{}.len_{}.{}.log'.format(args.target, args.experiment_name,
+                                                                         args.lamb, args.tri_len, now_time)
 
     if os.path.exists(log_path):
         os.remove(log_path)
@@ -84,29 +78,31 @@ def main():
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
     logger.info('Runing with configurations: {}'.format(json.dumps(args.__dict__, indent=4)))
+    print('Runing with configurations: {}'.format(json.dumps(args.__dict__, indent=4)))
 
     tokenizer = BertTokenizerFast.from_pretrained(args.transformer_model)
     if args.mode == 'train':
         train_trigger(args, logger, tokenizer)
+    elif args.mode == 'test':
+        test_transfer(args)
     else:
         raise ValueError('Not implemented error!')
 
 
 def train_trigger(args, logger, tokenizer):
     target_q_passage, query_scores, best_query_sent, queries, passages_dict = prepare_data_and_scores(
-        experiment_name=args.experiment_name,
+        target_name=args.target,
         data_name=args.data_name,
         top_k=10,
-        least_num=5)
-
+        least_num=10)
     model = pairwise_bert.BertForPairwiseLearning.from_pretrained(args.transformer_model)
     model.to(device)
-    if args.experiment_name == 'pairwise.v2':
-        model_path = prodir + '/bert_ranker/saved_models/Imitation.MiniLM.L12.v2.' + model.__class__.__name__ + '.' + args.transformer_model + '.pth'
-    elif args.experiment_name == 'pairwise.v1':
-        model_path = prodir + '/bert_ranker/saved_models/Imitation.bert_large.further_train.' + model.__class__.__name__ + '.' + args.transformer_model + '.pth'
-    elif args.experiment_name == 'pairwise.wo.imitation':
-        model_path = prodir + '/bert_ranker/saved_models/' + model.__class__.__name__ + '.' + args.transformer_model + '.pth'
+    if args.experiment_name == 'imitate.v2':
+        model_path = prodir + '/bert_ranker/saved_models/Imitation.MiniLM.L12.v2.' + model.__class__.__name__ + '.' + args.transformer_model + '.372.pth'
+    elif args.experiment_name == 'imitate.v1':
+        model_path = prodir + '/bert_ranker/saved_models/Imitation.bert_large.dl714.further_train.' + model.__class__.__name__ + '.' + args.transformer_model + '.pth'
+    elif args.experiment_name == 'pairwise':
+        model_path = prodir + '/bert_ranker/saved_models/BertForPairwiseLearning.bert-base-uncased.dl714.ms381.pth'
     logger.info("Load model from: {}".format(model_path))
     print("Load model from: {}".format(model_path))
     model.load_state_dict(torch.load(model_path))
@@ -114,7 +110,7 @@ def train_trigger(args, logger, tokenizer):
     for param in model.parameters():
         param.requires_grad = False
 
-    lm_model = BertForLM.from_pretrained('bert-base-uncased')
+    lm_model = BertForLM.from_pretrained(args.lm_model_dir)
     lm_model.to(device)
     lm_model.eval()
     for param in lm_model.parameters():
@@ -139,19 +135,16 @@ def train_trigger(args, logger, tokenizer):
     q_candi_trigger_dict = dict()
 
     used_qids = list(queries.keys())
-    # random.shuffle(used_qids)
 
     for qid in tqdm(used_qids, desc="Processing"):
         torch.manual_seed(args.seed + cnt)
         torch.cuda.manual_seed_all(args.seed + cnt)
         cnt += 1
-
         tmp_trigger_dict = {}
         query = queries[qid]
         best = best_query_sent[qid]
         best_score = best[0]
-        best_sent = ' '.join(best[1:5])
-
+        best_sent = ' '.join(best[1:3])
         old_scores = query_scores[qid][::-1]
 
         for did in target_q_passage[qid]:
@@ -179,8 +172,6 @@ def train_trigger(args, logger, tokenizer):
             print(msg)
             logger.info(msg)
             if args.verbose:
-                logger.info('---Rank shifts for less relevant documents---')
-
                 old_rank, old_score = target_q_passage[qid][did]
                 new_rank = len(old_scores) - bisect.bisect_left(old_scores, new_score)
 
@@ -222,11 +213,54 @@ def train_trigger(args, logger, tokenizer):
     print(res_str)
     logger.info(res_str)
 
-    with open(curdir + '/saved_results/cands_triggers_{}_{}_{}.json'.format(args.experiment_name, args.beta, args.gamma), 'w', encoding='utf-8') as fout:
+    with open(curdir + '/saved_results/triggers_{}_on_{}_{}_{}.json'.format(args.target, args.experiment_name,
+                                                                            args.lamb, args.tri_len), 'w',
+              encoding='utf-8') as fout:
         fout.write(json.dumps(q_candi_trigger_dict, ensure_ascii=False))
         print('Trigger saved!')
 
+
+def test_transfer(args):
     print('Test all triggers on imitation model...')
+    # load victim models results
+    target_q_passage, query_scores, best_query_sent, queries, passages_dict = prepare_data_and_scores(
+        target_name=args.target,
+        data_name='dl',
+        top_k=10,
+        least_num=10)
+
+    if args.target == 'mini':
+        tokenizer = AutoTokenizer.from_pretrained("cross-encoder/ms-marco-MiniLM-L-12-v2")
+        model = AutoModelForSequenceClassification.from_pretrained("cross-encoder/ms-marco-MiniLM-L-12-v2")
+        model.to(device)
+    elif args.target == 'large':
+        tokenizer = BertTokenizerFast.from_pretrained('bert-large-uncased')
+        model = AutoModelForSequenceClassification.from_pretrained("nboost/pt-bert-large-msmarco")
+        model.to(device)
+    elif args.target == 'imitate.v1':
+        tokenizer = BertTokenizerFast.from_pretrained('bert-base-uncased')
+        model = pairwise_bert.BertForPairwiseLearning.from_pretrained(args.transformer_model)
+        model.to(device)
+        model_path = prodir + '/bert_ranker/saved_models/Imitation.MiniLM.L12.v2.' + model.__class__.__name__ + '.' + args.transformer_model + '.372.pth'
+        print("Load model from: {}".format(model_path))
+        model.load_state_dict(torch.load(model_path))
+
+    elif args.target == 'imitate.v2':
+        tokenizer = BertTokenizerFast.from_pretrained('bert-base-uncased')
+        model = pairwise_bert.BertForPairwiseLearning.from_pretrained(args.transformer_model)
+        model.to(device)
+        model_path = prodir + '/bert_ranker/saved_models/Imitation.bert_large.dl714.further_train.' + model.__class__.__name__ + '.' + args.transformer_model + '.pth'
+        print("Load model from: {}".format(model_path))
+        model.load_state_dict(torch.load(model_path))
+
+    model.eval()
+    for param in model.parameters():
+        param.requires_grad = False
+
+    trigger_path = curdir + '/saved_results/triggers_{}_on_{}_{}_{}.json'.format(args.target, args.experiment_name,
+                                                                                 args.lamb, args.tri_len)
+    with open(trigger_path, 'r', encoding='utf-8') as fin:
+        q_candi_trigger_dict = json.loads(fin.readline())
 
     total_docs_cnt = 0
     success_cnt = 0
@@ -234,69 +268,70 @@ def train_trigger(args, logger, tokenizer):
     less_100_cnt = 0
     less_50_cnt = 0
     less_10_cnt = 0
-    for qid in tqdm(used_qids, desc="Processing"):
-        query = queries[qid]
-        best = best_query_sent[qid]
-        best_sent = best[1]
-        old_scores = query_scores[qid][::-1]
+    boost_rank_list = []
+    query_keys = list(q_candi_trigger_dict.keys())
 
-        query_ids = tokenizer.encode(query, add_special_tokens=True)
-        query_ids = torch.tensor(query_ids, device=device).unsqueeze(0)
+    with torch.no_grad():
+        for qid in tqdm(query_keys):
+            query = queries[qid]
+            old_scores = query_scores[qid][::-1]
 
-        best_sent_ids = tokenizer.encode(best_sent, add_special_tokens=True)
-        best_sent_ids = torch.tensor(best_sent_ids[1:], device=device).unsqueeze(0)
+            triggers = q_candi_trigger_dict[qid]
+            for did in target_q_passage[qid]:
+                tmp_best_new_score = -1e9
+                old_rank, raw_score = target_q_passage[qid][did]
+                # tail
+                # triggered_passage = passages_dict[did] + ' ' + triggers[t_did]
+                # head
+                triggered_passage = triggers[did] + ' ' + passages_dict[did]
+                # middle
+                # half_len_passage = int(len(passages_dict[did]) / 2)
+                # triggered_passage = passages_dict[did][:half_len_passage] + ' ' + triggers[t_did]
+                #                       + ' ' + passages_dict[did][half_len_passage:]
+                batch_encoding = tokenizer([[query, triggered_passage]], max_length=512, padding="max_length",
+                                           truncation=True, return_tensors='pt')
 
-        placeholder_input_ids_neg = torch.cat([query_ids, best_sent_ids], dim=-1)
-        placeholder_type_ids_neg = torch.cat([torch.zeros_like(query_ids), torch.ones_like(best_sent_ids)], dim=-1)
-        placeholder_attention_mask_neg = torch.ones_like(placeholder_input_ids_neg)
+                if args.target == 'mini':
+                    outputs = model(**(batch_encoding.to(device)))
+                    new_score = outputs.logits.squeeze().item()
+                elif args.target == 'large':
+                    outputs = model(**(batch_encoding.to(device)))
+                    new_score = outputs.logits[0, -1].item()
+                else:
+                    input_ids = batch_encoding['input_ids'].to(device)
+                    token_type_ids = batch_encoding['token_type_ids'].to(device)
+                    attention_mask = batch_encoding['attention_mask'].to(device)
 
-        triggers = q_candi_trigger_dict[qid]
-        for did in target_q_passage[qid]:
-            tmp_best_new_score = -1e9
-            old_rank, raw_score = target_q_passage[qid][did]
-            for t_did, _ in triggers.items():
-
-                triggered_passage = triggers[t_did] + ' ' + passages_dict[did]
-                triggered_passage_ids = tokenizer.encode(triggered_passage, add_special_tokens=True)
-                triggered_passage_ids = torch.tensor(triggered_passage_ids[1:], device=device).unsqueeze(0)
-
-                input_ids_pos = torch.cat([query_ids, triggered_passage_ids], dim=-1)
-                token_type_ids_pos = torch.cat([torch.zeros_like(query_ids), torch.ones_like(triggered_passage_ids)],
-                                               dim=-1)
-                attention_mask_pos = torch.ones_like(input_ids_pos)
-
-                outputs = model(input_ids_pos=input_ids_pos,
-                                attention_mask_pos=attention_mask_pos,
-                                token_type_ids_pos=token_type_ids_pos,
-                                input_ids_neg=placeholder_input_ids_neg,
-                                attention_mask_neg=placeholder_attention_mask_neg,
-                                token_type_ids_neg=placeholder_type_ids_neg)[0]
-                new_score = outputs[0, 1].item()
-
+                    outputs = model(input_ids_pos=input_ids,
+                                    attention_mask_pos=attention_mask,
+                                    token_type_ids_pos=token_type_ids,
+                                    input_ids_neg=input_ids,
+                                    attention_mask_neg=attention_mask,
+                                    token_type_ids_neg=token_type_ids)[0]
+                    new_score = outputs[0, 1].item()
                 if tmp_best_new_score < new_score:
                     tmp_best_new_score = new_score
                 print("New high score: {:.4f}".format(new_score))
-                print("Trigger: {}".format(triggers[t_did]))
+                print("Trigger: {}".format(triggers[did]))
+                new_rank = len(old_scores) - bisect.bisect_left(old_scores, tmp_best_new_score)
 
-            new_rank = len(old_scores) - bisect.bisect_left(old_scores, tmp_best_new_score)
+                total_docs_cnt += 1
+                boost_rank_list.append(old_rank - new_rank)
+                if old_rank > new_rank:
+                    success_cnt += 1
+                    if new_rank <= 500:
+                        less_500_cnt += 1
+                        if new_rank <= 100:
+                            less_100_cnt += 1
+                            if new_rank <= 50:
+                                less_50_cnt += 1
+                                if new_rank <= 10:
+                                    less_10_cnt += 1
 
-            total_docs_cnt += 1
-            boost_rank_list.append(old_rank - new_rank)
-            if old_rank > new_rank:
-                success_cnt += 1
-                if new_rank <= 500:
-                    less_500_cnt += 1
-                    if new_rank <= 100:
-                        less_100_cnt += 1
-                        if new_rank <= 50:
-                            less_50_cnt += 1
-                            if new_rank <= 10:
-                                less_10_cnt += 1
+                print(f'Query id={qid}, Doc id={did}, '
+                      f'old score={raw_score:.4f}, new score={tmp_best_new_score:.4f}, old rank={old_rank}, new rank={new_rank}')
 
-            print(f'Query id={qid}, Doc id={did}, '
-                  f'old score={raw_score:.4f}, new score={tmp_best_new_score:.4f}, old rank={old_rank}, new rank={new_rank}')
-
-        print('\n\n')
+            print('\n\n')
 
     boost_success_rate = success_cnt / (total_docs_cnt + 0.0) * 100
     less_500_rate = less_500_cnt / (total_docs_cnt + 0.0) * 100
@@ -304,6 +339,7 @@ def train_trigger(args, logger, tokenizer):
     less_50_rate = less_50_cnt / (total_docs_cnt + 0.0) * 100
     less_10_rate = less_10_cnt / (total_docs_cnt + 0.0) * 100
     avg_boost_rank = np.average(boost_rank_list)
+    print("Imitation: {}; Target: {}".format(args.target, args.experiment_name))
     res_str = 'Boost Success Rate: {}\n' \
               'Average Boost Rank: {}\n' \
               'less than 500 Rate: {}\n' \

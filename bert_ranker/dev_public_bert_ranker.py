@@ -5,11 +5,10 @@ curdir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(curdir))
 prodir = os.path.dirname(curdir)
 
-
 import time
 import pandas as pd
 import numpy as np
-from transformers import BertTokenizerFast, BertConfig, BertModel, AutoModelForSequenceClassification
+from transformers import BertTokenizerFast, AutoModelForSequenceClassification
 from transformers import AutoTokenizer, AutoModel
 from bert_ranker.dataloader.dataset import MSMARCO_PR_Pair_Dataset
 import bert_ranker_utils
@@ -26,21 +25,33 @@ def main():
     # Input and output configs
     parser.add_argument("--output_dir", default=curdir + '/results', type=str,
                         help="the folder to output predictions")
-    parser.add_argument("--mode", default='mb2014', type=str,
+    parser.add_argument("--mode", default='dl2019', type=str,
                         help="eval_full_dev1000/eval_pseudo_full_dev1000/dl2019/eval_subsmall_dev")
 
     # Training procedure
     parser.add_argument("--seed", default=42, type=str,
                         help="random seed")
 
-    parser.add_argument("--val_batch_size", default=1024, type=int,
+    parser.add_argument("--val_batch_size", default=256, type=int,
                         help="Validation and test batch size.")
 
     # Model hyperparameters
-    parser.add_argument("--transformer_model", default="bert-base-uncased", type=str, required=False,
+    parser.add_argument("--transformer_model", default="bert-large-uncased", type=str, required=False,
                         help="Bert model to use (default = bert-base-cased).")
     parser.add_argument("--max_seq_len", default=256, type=int, required=False,
                         help="Maximum sequence length for the inputs.")
+    parser.add_argument("--lr", default=1e-6, type=float, required=False,
+                        help="Learning rate.")
+    parser.add_argument("--max_grad_norm", default=1, type=float, required=False,
+                        help="Max gradient normalization.")
+    parser.add_argument("--accumulation_steps", default=1, type=float, required=False,
+                        help="gradient accumulation.")
+    parser.add_argument("--warmup_portion", default=0.1, type=float, required=False,
+                        help="warmup portion.")
+    parser.add_argument("--loss_function", default="label-smoothing-cross-entropy", type=str, required=False,
+                        help="Loss function (default is 'cross-entropy').")
+    parser.add_argument("--smoothing", default=0.1, type=float, required=False,
+                        help="Smoothing hyperparameter used only if loss_function is label-smoothing-cross-entropy.")
 
     args = parser.parse_args()
     args.model_name = 'pub-ranker'
@@ -141,7 +152,7 @@ def main():
         all_softmax_logits, _ = bert_ranker_utils.accumulate_list_by_qid(all_softmax_logits, all_qids)
         all_pids, all_qids = bert_ranker_utils.accumulate_list_by_qid(all_pids, all_qids)
 
-        res = metrics.evaluate_and_aggregate(all_logits, all_labels, ['ndcg_cut_10', 'map', 'recip_rank', 'MRR@10'])
+        res = metrics.evaluate_and_aggregate(all_logits, all_labels, ['ndcg_cut_10', 'map', 'recip_rank'])
         for metric, v in res.items():
             print("\n{} {} : {:3f}".format(args.mode, metric, v))
 
@@ -166,7 +177,6 @@ def main():
             run_list = []
             for probs, qids, pids in zip(all_logits, all_qids, all_pids):
                 sorted_idx = np.array(probs).argsort()[::-1]
-                # top_probs = np.array(probs)[sorted_idx[:top_k]]
                 top_qids = np.array(qids)[sorted_idx[:top_k]]
                 top_pids = np.array(pids)[sorted_idx[:top_k]]
                 for rank, (t_qid, t_pid) in enumerate(zip(top_qids, top_pids)):

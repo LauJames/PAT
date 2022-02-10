@@ -21,7 +21,6 @@ RECALL_AT_W_CAND = {
 
 MRR_AT_K = {
     'MRR@10',
-    # 'MRR@1000'
 }
 
 
@@ -38,7 +37,6 @@ def recall_at_with_k_candidates(preds, labels, k, at):
     Returns: float containing Recall_k@at
     """
     num_rel = len([l for l in labels if l >= 1])
-    # 'removing' candidates (relevant has to be in first positions in labels)
     preds = preds[:k]
     labels = labels[:k]
 
@@ -78,40 +76,6 @@ def evaluate_models(results):
         evaluator = pytrec_eval.RelevanceEvaluator(qrel, METRICS)
         results[model]['eval'] = evaluator.evaluate(run)
 
-        # for MRR at k
-        for mrr_metric in MRR_AT_K:
-            at_k = int(mrr_metric.split("@")[-1])
-            for i, p in enumerate(preds):
-                run['q{}'.format(i+1)] = {}
-                qrel['q{}'.format(i+1)] = {}
-                if len(preds[i]) < at_k:
-                    topn = len(preds[i])
-                else:
-                    topn = at_k
-                for j, _ in enumerate(range(topn)):
-                    run['q{}'.format(i+1)]['d{}'.format(j+1)
-                                           ] = float(preds[i][j])
-                    qrel['q{}'.format(i + 1)]['d{}'.format(j + 1)
-                                              ] = int(labels[i][j])
-            evaluator = pytrec_eval.RelevanceEvaluator(qrel, {'recip_rank'})
-            tmp_mrr_res = evaluator.evaluate(run)
-
-            # merge mrr into results dict
-            for query in qrel.keys():
-                results[model]['eval'][query][mrr_metric] = tmp_mrr_res[query]['recip_rank']
-
-        # for query in qrel.keys():
-        #     # for Recall@N
-        #     preds = []
-        #     labels = []
-        #     for doc in run[query].keys():
-        #         preds.append(run[query][doc])
-        #         labels.append(qrel[query][doc])
-
-        #     for recall_metric in RECALL_AT_W_CAND:
-        #         cand = int(recall_metric.split("@")[0].split("R_")[1])
-        #         at = int(recall_metric.split("@")[-1])
-        #         results[model]['eval'][query][recall_metric] = recall_at_with_k_candidates(preds, labels, cand, at)
     return results
 
 

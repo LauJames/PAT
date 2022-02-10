@@ -9,7 +9,7 @@ import json
 import torch
 import logging
 import time
-from transformers import BertTokenizerFast, BertConfig
+from transformers import BertTokenizerFast
 from bert_ranker.models import pairwise_bert
 from bert_ranker.dataloader.dataset_imitate import Imitation_Dataset
 from bert_ranker.network_trainer import Trainer
@@ -42,7 +42,7 @@ def main():
                         help="Run validation every <validate_every_steps> steps.")
     parser.add_argument("--num_validation_batches", default=-1, type=int,
                         help="Run validation for a sample of <num_validation_batches>. To run on all instances use -1.")
-    parser.add_argument("--train_batch_size", default=512, type=int,
+    parser.add_argument("--train_batch_size", default=128, type=int,
                         help="Training batch size.")
     parser.add_argument("--val_batch_size", default=1024, type=int,
                         help="Validation and test batch size.")
@@ -56,7 +56,7 @@ def main():
     # Model hyperparameters
     parser.add_argument("--transformer_model", default="bert-base-uncased", type=str, required=False,
                         help="Bert model to use (default = bert-base-cased).")
-    parser.add_argument("--max_seq_len", default=128, type=int, required=False,
+    parser.add_argument("--max_seq_len", default=256, type=int, required=False,
                         help="Maximum sequence length for the inputs.")
     parser.add_argument("--lr", default=7e-6, type=float, required=False,
                         help="Learning rate.")
@@ -78,13 +78,23 @@ def main():
     logger.setLevel(logging.INFO)
     formatter = logging.Formatter('%(asctime)s - %(message)s')
 
+    # sample_config_tail = 'top_10_last_35'
+    # sample_config_tail = 'top_15_last_19'
+    # sample_config_tail = 'top_16_last_17'
+    sample_config_tail = 'top_20_last_10'
+    # sample_config_tail = 'top_25_last_4'
+    # sample_config_tail = 'top_15_last_59'
+    # sample_config_tail = 'top_16_last_55'
+    # sample_config_tail = 'top_20_last_40'
+    # sample_config_tail = 'top_25_last_28'
+
     # log directory
     log_dir = curdir + '/logs'
     if not os.path.exists(log_dir):
         os.mkdir(log_dir)
     now_time = '_'.join(time.asctime(time.localtime(time.time())).split()[:3])
 
-    log_path = log_dir + '/imitation.pairwise.mspr.' + now_time + '.' + args.mode + '.log'
+    log_path = log_dir + '/imitation.pairwise.mspr.' + sample_config_tail + '.' + now_time + '.' + args.mode + '.log'
     args.run_id = 'imitation.' + args.transformer_model + '.pairwise.' + now_time
     tensorboard_dir = curdir + '/tensorboard_dir/imitation_pairwise_triples_' + args.transformer_model + '/'
 
@@ -112,12 +122,15 @@ def main():
                                                                   loss_function=args.loss_function,
                                                                   smoothing=args.smoothing)
 
-    data_obj = Imitation_Dataset(tokenizer=tokenizer)
+    data_obj = Imitation_Dataset(tokenizer=tokenizer, sample_config_tail=sample_config_tail)
 
     # load fine-tuned pairwise ranker
     start_model_path = curdir + '/saved_models/' + model.__class__.__name__ + '.' + args.transformer_model + '.pth'
 
-    model_path = curdir + '/saved_models/Imitation.bert_large.further_train.' + model.__class__.__name__ + '.' + args.transformer_model + '.pth'
+    # model_path = curdir + '/saved_models/Imitation.bert_large.straight.' + model.__class__.__name__ + '.' + args.transformer_model + '.pth'
+    # model_path = curdir + '/saved_models/Imitation.bert_large.further.' + model.__class__.__name__ + '.' + args.transformer_model + '.pth'
+    # model_path = curdir + '/saved_models/Imitation.MiniLM.straight.' + model.__class__.__name__ + '.' + sample_config_tail + '.' + args.transformer_model + '.pth'
+    model_path = curdir + '/saved_models/Imitation.MiniLM.further.' + model.__class__.__name__ + '.' + sample_config_tail + '.' + args.transformer_model + '.pth'
 
     trainer = Trainer(
         model=model,
@@ -125,7 +138,7 @@ def main():
         tokenizer=tokenizer,
         model_path=model_path,
         start_model_path=start_model_path,
-        validation_metric=['ndcg_cut_10', 'map', 'recip_rank', 'MRR@10'],
+        validation_metric=['ndcg_cut_10', 'map', 'recip_rank'],
         monitor_metric='ndcg_cut_10',
         args=args,
         writer_train=writer_train,

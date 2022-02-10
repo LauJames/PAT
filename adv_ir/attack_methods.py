@@ -7,7 +7,7 @@ prodir = os.path.dirname(curdir)
 
 import torch
 from pattern.text.en import singularize, pluralize
-from attack_utils import create_constraints, get_inputs_filter_ids, get_sub_masks, STOPWORDS
+from attack_utils import create_constraints, get_sub_masks, STOPWORDS
 
 BOS_TOKEN = '[unused0]'
 
@@ -64,8 +64,8 @@ def add_single_plural(text, tokenizer, contain_sub=False):
     return [w for w in tokens + contains if w not in STOPWORDS]
 
 
-def gen_adversarial_trigger_pair_passage(query, best_sent, raw_passage, model, tokenizer, device, args, logger,
-                                         nsp_model=None, lm_model=None):
+def gen_adversarial_trigger_pair_passage(query, best_sent, raw_passage, model, tokenizer, device, logger, args,
+                                         nsp_model=None, lm_model=None, eps=0.68):
     word_embedding = model.get_input_embeddings().weight.detach()
 
     if lm_model is not None:
@@ -73,6 +73,18 @@ def gen_adversarial_trigger_pair_passage(query, best_sent, raw_passage, model, t
 
     vocab_size = word_embedding.size(0)
     input_mask = torch.zeros(vocab_size, device=device)
+
+    nearby_words = find_filters(query, model, tokenizer, device=device, k=args.num_top_words)
+    nearby_words_ids = tokenizer.convert_tokens_to_ids(nearby_words)
+    input_mask[nearby_words_ids] = eps
+
+    remove_tokens = add_single_plural(query, tokenizer, contain_sub=True)
+    remove_ids = tokenizer.convert_tokens_to_ids(remove_tokens)
+    input_mask[remove_ids] = eps
+
+    input_mask[tokenizer.convert_tokens_to_ids(['.', '@', '='])] = -1e9
+    unk_ids = tokenizer.encode('<unk>', add_special_tokens=False)
+    input_mask[unk_ids] = -1e9
 
     query_ids = tokenizer.tokenize(query, add_special_tokens=False)
     removed_query_tokens = []
@@ -82,11 +94,9 @@ def gen_adversarial_trigger_pair_passage(query, best_sent, raw_passage, model, t
                 removed_query_tokens.append(word)
     remove_q_ids = tokenizer.convert_tokens_to_ids(removed_query_tokens)
     input_mask[remove_q_ids] = 1e-9
-    if args.verbose:
-        logger.info(','.join(removed_query_tokens))
-        print(','.join(removed_query_tokens) + '\n')
 
-    sub_mask = torch.zeros(vocab_size, device=device)
+    # mask out sub words
+    sub_mask = get_sub_masks(tokenizer, device)
 
     # [q_len + 2]
     query_ids = tokenizer.encode(query, add_special_tokens=True)
@@ -110,13 +120,9 @@ def gen_adversarial_trigger_pair_passage(query, best_sent, raw_passage, model, t
 
     def relaxed_to_word_embs(x):
         # convert relaxed inputs to word embedding by softmax attention
-        masked_x = x + input_mask + sub_mask
-        if args.regularize:
-            masked_x += stopwords_mask
+        masked_x = x + input_mask + sub_mask + stopwords_mask
         p = torch.softmax(masked_x / args.stemp, -1)
-        # [vocab_size] * [vocab_size, 1024]
         x = torch.mm(p, word_embedding)
-        # add embeddings for period and SEP
         x = torch.cat([x, word_embedding[tokenizer.sep_token_id].unsqueeze(0)])
         return p, x.unsqueeze(0)
 
@@ -129,14 +135,12 @@ def gen_adversarial_trigger_pair_passage(query, best_sent, raw_passage, model, t
         input_emb = torch.einsum('blv,vh->blh', input_ids_one_hot, word_embedding)
         return input_emb
 
-    # some constants
     # [50]
     sep_tensor = torch.tensor([tokenizer.sep_token_id] * args.topk, device=device)
     # [50, 1, 1024]
     batch_sep_embeds = word_embedding[sep_tensor].unsqueeze(1)
     nsp_labels = torch.zeros((1,), dtype=torch.long, device=device)
     labels = torch.ones((1,), dtype=torch.long, device=device)
-    repetition_penalty = args.repetition_penalty
 
     best_trigger = None
     best_score = -1e9
@@ -148,12 +152,11 @@ def gen_adversarial_trigger_pair_passage(query, best_sent, raw_passage, model, t
     z_i = torch.normal(mean=0., std=1.0, size=var_size, requires_grad=True, device=device)
     for it in range(args.max_iter):
         optimizer = torch.optim.Adam([z_i], lr=args.lr)
-        for j in range(args.perturb_iter):
+        for j in range(args.var_iter):
             optimizer.zero_grad()
             # relaxation
             # [16, 30522], [1, 17, 1024] - add [SEP]
             p_inputs, z_trigger_embeds = relaxed_to_word_embs(z_i)
-            # forward to BERT with relaxed inputs
             # transform query into embedd vector [1, seq_len + 2] --> [1, seq_len + 2, vocab_size]
             query_emb = ids_to_emb(query_ids)
             best_sent_emb = ids_to_emb(best_sent_ids)
@@ -162,7 +165,6 @@ def gen_adversarial_trigger_pair_passage(query, best_sent, raw_passage, model, t
             # [CLS + query + SEP, trigger, SEP] > [CLS + query + SEP, best, SEP]
             concat_inputs_emb_pos = torch.cat([query_emb, z_trigger_embeds], dim=1)
             concat_inputs_emb_neg = torch.cat([query_emb, best_sent_emb], dim=1)
-
             outputs = model(
                 inputs_embeds_pos=concat_inputs_emb_pos,
                 inputs_embeds_neg=concat_inputs_emb_neg[:, :256, :],
@@ -170,17 +172,16 @@ def gen_adversarial_trigger_pair_passage(query, best_sent, raw_passage, model, t
             )
             loss, cls_logits = outputs[0], outputs[1]
 
-            if args.beta > 0.:
+            if args.lamb > 0.:
                 lm_loss = get_lm_loss(p_inputs)
-                loss += args.beta * lm_loss
 
-            if args.gamma > 0.:
                 concat_nsp_embs = torch.cat([
                     word_embedding[tokenizer.cls_token_id].unsqueeze(0).unsqueeze(0),
-                    z_trigger_embeds,
-                    passage_emb], dim=1)[:, :256, :]
+                    passage_emb,
+                    z_trigger_embeds], dim=1)[:, :256, :]
                 nsp_loss = nsp_model.forward(inputs_embeds=concat_nsp_embs, labels=nsp_labels, return_dict=True)['loss']
-                loss += args.gamma * nsp_loss
+
+                loss = args.lamb * (torch.log10(lm_loss) + 100 * nsp_loss) + (1 - args.lamb) * loss
 
             loss.backward()
             optimizer.step()
@@ -188,7 +189,6 @@ def gen_adversarial_trigger_pair_passage(query, best_sent, raw_passage, model, t
                 logger.info('It{}-{}, loss={}'.format(it, j + 1, loss.item()))
                 print('It{}-{}, loss={}'.format(it, j + 1, loss.item()))
 
-        # detach to free GPU memory
         z_i = z_i.detach()
         # [seq_len, 50]
         _, topk_tokens = torch.topk(z_i, args.topk)
@@ -197,7 +197,6 @@ def gen_adversarial_trigger_pair_passage(query, best_sent, raw_passage, model, t
 
         # [num_beam=10, 16]
         output_so_far = None
-        # beam search left to right, get candidate trigger
         for t in range(seq_len):
             tmp_topk_tokens = topk_tokens[t]
             # [50, vocab_size]
@@ -219,10 +218,12 @@ def gen_adversarial_trigger_pair_passage(query, best_sent, raw_passage, model, t
                 batch_query_emb = ids_to_emb(batch_query_ids)
 
                 context_embeds = torch.cat([search_context_embeds, batch_sep_embeds], 1)
+
                 # concat inputs and context embeddings
                 concat_inputs_emb_pos = torch.cat([batch_query_emb, context_embeds], dim=1)
                 clf_logits = model(
                     inputs_embeds_pos=concat_inputs_emb_pos,
+                    # input_embeds_neg does not affect the logits value of pos, it is just a placeholder
                     inputs_embeds_neg=concat_inputs_emb_pos
                 )[0]
                 clf_scores = clf_logits[:, 1].detach().float()
@@ -232,14 +233,11 @@ def gen_adversarial_trigger_pair_passage(query, best_sent, raw_passage, model, t
             next_clf_scores = torch.cat(next_clf_scores, 0)
             next_scores = next_clf_scores + input_mask + sub_mask
 
-            if args.regularize:
-                next_scores += stopwords_mask[t]
+
+            next_scores += stopwords_mask[t]
             if output_so_far is None:
                 next_scores[1:] = -1e9
-            if output_so_far is not None and repetition_penalty > 1.0:
-                lm_model.enforce_repetition_penalty_(next_scores, 1, args.num_beams, output_so_far, repetition_penalty)
 
-            # re-organize to group the beam together
             # [batch_size, num_beams * vocab_size]
             next_scores = next_scores.view(1, args.num_beams * vocab_size)
             next_scores, next_tokens = torch.topk(next_scores, args.num_beams, dim=1, largest=True, sorted=True)
@@ -263,15 +261,15 @@ def gen_adversarial_trigger_pair_passage(query, best_sent, raw_passage, model, t
             else:
                 output_so_far = output_so_far[beam_idx, :]
                 output_so_far = torch.cat([output_so_far, beam_tokens.unsqueeze(1)], dim=-1)
-            # end of beam search
+            ###  end of beam search
         # [num_beams, tri_len + 1]
         pad_output_so_far = torch.cat([output_so_far, sep_tensor[:args.num_beams].unsqueeze(1)], dim=1)
-
         concat_input_ids_pos = torch.cat([batch_query_ids[:args.num_beams], pad_output_so_far], 1)
         token_type_ids_pos = torch.cat([torch.zeros_like(batch_query_ids[:args.num_beams]),
                                         torch.ones_like(pad_output_so_far)], dim=1)
         attention_mask_pos = torch.ones_like(concat_input_ids_pos)
 
+        # [num_beams, 2]
         final_clf_logits = model(
             input_ids_pos=concat_input_ids_pos,
             attention_mask_pos=attention_mask_pos,
@@ -282,16 +280,15 @@ def gen_adversarial_trigger_pair_passage(query, best_sent, raw_passage, model, t
         )[0]
         actual_clf_scores = final_clf_logits[:, 1]
         sorter = torch.argsort(actual_clf_scores, -1, descending=True)
-        # validation the output
-        valid_idx = sorter[0]
 
-        curr_best = output_so_far[valid_idx]
+        used_idx = sorter[0]
+        curr_best = output_so_far[used_idx]
         next_z_i = torch.nn.functional.one_hot(curr_best, vocab_size).float()
-        eps = args.eps
-        next_z_i = (next_z_i * (1 - eps)) + (1 - next_z_i) * eps / (vocab_size - 1)
+        s_rate = args.smoothing_rate
+        next_z_i = (next_z_i * (1 - s_rate)) + (1 - next_z_i) * s_rate / (vocab_size - 1)
         z_i = torch.nn.Parameter(torch.log(next_z_i), True)
 
-        curr_score = actual_clf_scores[valid_idx].item()
+        curr_score = actual_clf_scores[used_idx].item()
 
         if curr_score > best_score:
             patience = 0
@@ -303,7 +300,6 @@ def gen_adversarial_trigger_pair_passage(query, best_sent, raw_passage, model, t
             patience += 1
         if patience > args.patience_limit:
             break
-
         prev_score = curr_score
 
     return best_trigger, best_score, trigger_cands

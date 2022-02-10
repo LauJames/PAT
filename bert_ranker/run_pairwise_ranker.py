@@ -23,8 +23,8 @@ def main():
     # Input and output configs
     parser.add_argument("--output_dir", default=curdir + '/results', type=str,
                         help="the folder to output predictions")
-    parser.add_argument("--mode", default='train_pseudo_same', type=str,
-                        help="train/eval_full_dev1000/eval_subsmall_dev/eval_pseudo_subsmall/eval_pseudo_full_dev1000/pseudo_same/train_pseudo/train_pseudo_same/dl2019")
+    parser.add_argument("--mode", default='train', type=str,
+                        help="train/eval_full_dev1000/eval_subsmall_dev/train_pseudo/dl2019")
 
     # Training procedure
     parser.add_argument("--from_triples", default=True, type=bool,
@@ -45,7 +45,7 @@ def main():
                         help="Training batch size.")
     parser.add_argument("--val_batch_size", default=2048, type=int,
                         help="Validation and test batch size.")
-    parser.add_argument("--sample_data", default=5120000, type=int,
+    parser.add_argument("--sample_data", default=2560000, type=int,
                         help="Amount of data to sample for training and eval. If no sampling required use -1.")
     parser.add_argument("--use_dev_triple", default=False, type=bool,
                         help="whether use dev triples to select the best model for pseudo label and extract.")
@@ -57,7 +57,7 @@ def main():
                         help="Bert model to use (default = bert-base-cased).")
     parser.add_argument("--max_seq_len", default=256, type=int, required=False,
                         help="Maximum sequence length for the inputs.")
-    parser.add_argument("--lr", default=5e-6, type=float, required=False,
+    parser.add_argument("--lr", default=7e-6, type=float, required=False,
                         help="Learning rate.")
     parser.add_argument("--max_grad_norm", default=0.1, type=float, required=False,
                         help="Max gradient normalization.")
@@ -133,9 +133,8 @@ def main():
         data_class=data_obj,
         tokenizer=tokenizer,
         model_path=model_path,
-        validation_metric=['ndcg_cut_10', 'map', 'recip_rank', 'MRR@10'],
-        # validation_metric=['MAP', 'RPrec', 'MRR', 'MRR@10','NDCG', 'NDCG@10'],
-        monitor_metric='MRR@10',
+        validation_metric=['ndcg_cut_10', 'map', 'recip_rank'],
+        monitor_metric='ndcg_cut_10',
         args=args,
         writer_train=writer_train,
         run_id=args.run_id,
@@ -144,25 +143,6 @@ def main():
     if args.mode in ['train', 'train_pseudo', 'train_pseudo_same']:
         trainer.train_ranker(mode=args.mode)
         writer_train.close()
-    elif args.mode in ['eval_subsmall_dev', 'eval_pseudo_subsmall', 'eval_full_dev1000', 'eval_pseudo_full_dev1000',
-                       'eval_pseudo_same_full_dev1000']:
-        with torch.no_grad():
-            model = trainer.load_model()
-            print("load {} ".format(model_path))
-            trainer.dev_pairwise(mode=args.mode, model=model)
-    elif args.mode == 'pseudo_same' or args.mode == 'pseudo_another':
-        with torch.no_grad():
-            model = trainer.load_model()
-            print("load {} for {}".format(model_path, args.mode))
-            model.eval()
-            trainer.pseudo_pairwise(mode=args.mode, model=model)
-    elif args.mode in ['dl2019', 'dl2019_same_pseudo', 'dl2019_pseudo']:
-        with torch.no_grad():
-            model = trainer.load_model()
-            print("load {}".format(model_path))
-            trainer.test_trec_dl(mode=args.mode, model=model)
-    elif args.mode == 'eval_dev_triples':
-        pass
     else:
         raise ValueError("Error mode !!!")
     print("Done!")

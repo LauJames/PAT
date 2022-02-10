@@ -14,10 +14,34 @@ runs_folder = prodir + '/bert_ranker/results/runs/'
 
 runs_folder = curdir + '/results/runs'
 
-victim_minilm_l12_v2_dl_runs = runs_folder + '/runs.ms-marco-MiniLM-L-12-v2.public.bert.msmarco.dl2019.csv'
+runs_folder = curdir + '/results/runs'
 
+bert_large_run = data_folder + '/runs_from_public/BERT_Large_dev_run.tsv'
+minilm_l12_v2_dl_runs = runs_folder + '/runs.ms-marco-MiniLM-L-12-v2.public.bert.msmarco.dl2019.csv'
 
-simulator_dl_run = runs_folder + '/runs.bert-base-uncased.pairwise.triples.dl2019.csv'
+simulator_dl_run = runs_folder + '/runs.bert-base-uncased.pairwise.triples.Tue_Nov_2.dl2019.csv'
+simulator_imitation_ms_run = runs_folder + '/runs.bert-base-uncased.pairwise.triples.Thu_Oct_28.eval_full_dev1000_imitation.csv'
+simulator_imitation_dl_run = runs_folder + '/runs.bert-base-uncased.pairwise.triples.Thu_Nov_4.dl2019_imitation.csv'
+simulator_imitation_minilm_further_dl_run = runs_folder + '/runs.bert-base-uncased.pairwise.triples.Thu_Nov_11.dl2019_imitation_miniLM_further_train.csv'
+simulator_imitation_minilm_straight_dl_run = runs_folder + '/runs.bert-base-uncased.pairwise.triples.Thu_Nov_11.dl2019_imitation_miniLM_straight.csv'
+simulator_imitation_straight_bert_large_dl_run = runs_folder + '/runs.bert-base-uncased.pairwise.triples.Tue_Nov_9.dl2019_imitation_straight_bert_large.csv'
+simulator_imitation_bert_large_further_dl_run = runs_folder + '/runs.bert-base-uncased.pairwise.triples.Wed_Nov_10.dl2019_imitation_bert_large_344_further_train.csv'
+simulator_imitation_pseudo_same_dl_run = runs_folder + '/runs.bert-base-uncased.pairwise.triples.Wed_Nov_10.dl2019_same_pseudo.csv'
+
+dl_imitate_further_MinilM_top25_last_4_runs = runs_folder + '/runs.bert-base-uncased.pairwise.triples.dl2019_imitation_miniLM_further.top_25_last_4.csv'
+dl_imitate_straight_mini_top20_last10_runs = runs_folder + '/runs.bert-base-uncased.pairwise.triples.dl2019_imitation_MiniLM_straight.top_20_last_10.csv'
+dl_imitate_straight_mini_top15_last19_runs = runs_folder + '/runs.bert-base-uncased.pairwise.triples.dl2019_imitation_MiniLM_straight.top_15_last_19.csv'
+dl_imitate_further_mini_top15_last19_runs = runs_folder + '/runs.bert-base-uncased.pairwise.triples.dl2019_imitation_MiniLM_further.top_15_last_19.csv'
+dl_imitate_straight_mini_top25_last28_runs = runs_folder + '/runs.bert-base-uncased.pairwise.triples.dl2019_imitation_MiniLM_straight.top_25_last_28.csv'
+dl_imitate_straight_mini_top20_last40_runs = runs_folder + '/runs.bert-base-uncased.pairwise.triples.dl2019_imitation_MiniLM_straight.top_20_last_40.csv'
+dl_imitate_further_mini_top25_last28_runs = runs_folder +'/runs.bert-base-uncased.pairwise.triples.dl2019_imitation_MiniLM_further.top_25_last_28.csv'
+dl_imitate_straight_mini_top15_last59_runs = runs_folder + '/runs.bert-base-uncased.pairwise.triples.dl2019_imitation_MiniLM_straight.top_15_last_59.csv'
+dl_imitate_straight_mini_top20_last_40_runs = runs_folder + '/runs.bert-base-uncased.pairwise.triples.dl2019_imitation_MiniLM_straight.top_20_last_40.csv'
+dl_imitate_straight_mini_top25_last_4_runs = runs_folder + '/runs.bert-base-uncased.pairwise.triples.dl2019_imitation_MiniLM_straight.top_25_last_4.csv'
+dl_imitate_further_mini_top25_last_4_runs = runs_folder + '/runs.bert-base-uncased.pairwise.triples.dl2019_imitation_MiniLM_further.top_25_last_4.csv'
+dl_imitate_further_mini_top20_last10_runs = runs_folder + '/runs.bert-base-uncased.pairwise.triples.dl2019_imitation_MiniLM_further.top_20_last_10.csv'
+dl_imitate_further_mini_top20_last10_64_runs = runs_folder + '/runs.bert-base-uncased.pairwise.triples.dl2019_imitation_MiniLM_further.top_20_last_10_64.csv'
+dl_imitate_further_mini_top20_last10_512_runs = runs_folder + '/runs.bert-base-uncased.pairwise.triples.dl2019_imitation_MiniLM_further.top_20_last_10_512.csv'
 
 
 def rbo_score(l1, l2, p):
@@ -40,7 +64,6 @@ def load_runs(runs_path):
     with open(runs_path, 'r') as f:
         for line in f:
             qid, _, did, _, _, _ = line.strip().split('\t')
-            # qid, did, _ = line.strip().split('\t')
             runs[qid].append(did)
     return runs
 
@@ -79,15 +102,10 @@ def avg_rbo(runs_path_1, runs_path_2, topn=10, p=0.9):
 
 
 if __name__ == "__main__":
-    victim = victim_minilm_l12_v2_dl_runs
-    simulator = simulator_dl_run
+    victim = minilm_l12_v2_dl_runs
+    simulator = dl_imitate_further_mini_top20_last10_runs
     p = 0.7
-
-    avg_rbo(victim, simulator, topn=5, p=p)
-    avg_rbo(victim, simulator, topn=10, p=p)
-    avg_rbo(victim, simulator, topn=50, p=p)
-    avg_rbo(victim, simulator, topn=100, p=p)
-    avg_rbo(victim, simulator, topn=200, p=p)
+    top_n_overlap(simulator, victim, topn=10)
     avg_rbo(victim, simulator, topn=1000, p=p)
 
 
