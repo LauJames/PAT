@@ -100,7 +100,7 @@ def train_trigger(args, logger, tokenizer):
     if args.experiment_name == 'imitate.v2':
         model_path = prodir + '/bert_ranker/saved_models/Imitation.MiniLM.L12.v2.' + model.__class__.__name__ + '.' + args.transformer_model + '.pth'
     elif args.experiment_name == 'imitate.v1':
-        model_path = prodir + '/bert_ranker/saved_models/Imitation.bert_large.dl714.further_train.' + model.__class__.__name__ + '.' + args.transformer_model + '.pth'
+        model_path = prodir + '/bert_ranker/saved_models/Imitation.bert_large.further_train.' + model.__class__.__name__ + '.' + args.transformer_model + '.pth'
     elif args.experiment_name == 'pairwise':
         model_path = prodir + '/bert_ranker/saved_models/BertForPairwiseLearning.bert-base-uncased.pth'
     logger.info("Load model from: {}".format(model_path))
@@ -249,7 +249,7 @@ def test_transfer(args):
         tokenizer = BertTokenizerFast.from_pretrained('bert-base-uncased')
         model = pairwise_bert.BertForPairwiseLearning.from_pretrained(args.transformer_model)
         model.to(device)
-        model_path = prodir + '/bert_ranker/saved_models/Imitation.bert_large.dl714.further_train.' + model.__class__.__name__ + '.' + args.transformer_model + '.pth'
+        model_path = prodir + '/bert_ranker/saved_models/Imitation.bert_large.further_train.' + model.__class__.__name__ + '.' + args.transformer_model + '.pth'
         print("Load model from: {}".format(model_path))
         model.load_state_dict(torch.load(model_path))
 
