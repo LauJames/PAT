@@ -36,24 +36,23 @@ def main():
 
     parser.add_argument("--target", type=str, default='mini', help='test on what model')
     parser.add_argument("--imitation_model", default='imitate.v2', type=str)
-    parser.add_argument("--part", default=0, type=int)
     parser.add_argument("--data_name", default="dl", type=str)
     parser.add_argument("--transformer_model", default="bert-base-uncased", type=str, required=False,
                         help="Bert model to use (default = bert-base-cased).")
     parser.add_argument("--tri_len", default=6, type=int, help="Maximun trigger length for generation.")
     parser.add_argument('--min_len', type=int, default=5, help='Min sequence length')
-    parser.add_argument("--topk", default=100, type=int, help="Top k sampling for beam search")
+    parser.add_argument("--topk", default=128, type=int, help="Top k sampling for beam search")
     parser.add_argument('--max_iter', type=int, default=20, help='maximum iteraiton')
-    parser.add_argument("--lamba_1", default=0.1, type=float, help="Coefficient for language model loss.")
+    parser.add_argument("--lambda_1", default=0.1, type=float, help="Coefficient for language model loss.")
     parser.add_argument('--stemp', type=float, default=0.1, help='temperature of softmax')
     parser.add_argument('--repetition_penalty', type=float, default=1.0, help='penalty of repetition')
     parser.add_argument('--lr', type=float, default=0.001, help='optimization step size')
     parser.add_argument("--num_beams", default=10, type=int, help="Number of beams")
-    parser.add_argument("--num_sim", default=300, type=int, help="Number of num_filters words to be filtered")
+    parser.add_argument("--num_sim", default=300, type=int, help="Number of similar words")
     parser.add_argument('--perturb_iter', type=int, default=5, help='PPLM iteration')
     parser.add_argument("--seed", default=42, type=str, help="random seed")
     parser.add_argument("--nsp", action='store_true', default=False)
-    parser.add_argument("--lamba_2", default=0.8, type=float, help="Coefficient for language model loss.")
+    parser.add_argument("--lambda_2", default=0.8, type=float, help="Coefficient for language model loss.")
 
     # Support setting
     parser.add_argument("--lm_model_dir", default=prodir + '/data/wiki103/bert', type=str,
@@ -200,13 +199,13 @@ def train_trigger(args, tokenizer):
     if args.num_beams == 1:
         trigger_path = curdir + '/saved_results/greedy_triggers_{}_on_{}_{}_{}_{}.json'.format(args.target,
                                                                                                args.imitation_model,
-                                                                                               args.lamba_1,
+                                                                                               args.lambda_1,
                                                                                                args.nsp,
                                                                                                args.tri_len)
     else:
         trigger_path = curdir + '/saved_results/triggers_{}_on_{}_{}_{}_{}.json'.format(args.target,
                                                                                         args.imitation_model,
-                                                                                        args.lamba_1,
+                                                                                        args.lambda_1,
                                                                                         args.nsp,
                                                                                         args.tri_len)
     with open(trigger_path, 'w', encoding='utf-8') as fout:
@@ -257,13 +256,13 @@ def test_transfer(args):
     if args.num_beams == 1:
         trigger_path = curdir + '/saved_results/greedy_triggers_{}_on_{}_{}_{}_{}.json'.format(args.target,
                                                                                                args.imitation_model,
-                                                                                               args.lamba_1,
+                                                                                               args.lambda_1,
                                                                                                args.nsp,
                                                                                                args.tri_len)
     else:
         trigger_path = curdir + '/saved_results/triggers_{}_on_{}_{}_{}_{}.json'.format(args.target,
                                                                                         args.imitation_model,
-                                                                                        args.lamba_1,
+                                                                                        args.lambda_1,
                                                                                         args.nsp,
                                                                                         args.tri_len)
     with open(trigger_path, 'r', encoding='utf-8') as fin:

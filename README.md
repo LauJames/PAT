@@ -82,8 +82,12 @@ Core implementation of Paper: "Order-Disorder: Imitation Adversarial Attacks for
   function name: gen_adversarial_trigger_pair_passage()
 
 - For generating adversarial triggers for ranking attack.
-  `python pat_attack.py --mode train`
+  ```shell
+  python pat_attack.py --target=mini --imitation_model=imitate.v2  --nsp --lamba_1=0.6 --lambda_2=0.1 --num_beams=10 --topk=128 --mode=train
+  ```
 > Note that we adopted the fine-tuned BERT LM from [Song et al.(2020)](https://github.com/csong27/collision-bert/blob/43eda087bf6d632bdb150d98e934206327f8d082/scripts/ft_bert_lm.py)
 
 - Test the transferability of triggers
-  `python pat_attack.py --mode test`
+  ```shell
+  python pat_attack.py --target=mini --imitation_model=imitate.v2  --nsp --lamba_1=0.6 --lambda_2=0.1 --num_beams=10 --topk=128 --mode=test
+  ```

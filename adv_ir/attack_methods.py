@@ -12,12 +12,12 @@ from nltk.corpus import stopwords
 BOS_TOKEN = '[unused0]'
 
 
-def get_inputs_filter_ids(inputs, tokenizer):
+def get_inputs_sim_ids(inputs, tokenizer):
     tokens = [w for w in tokenizer.tokenize(inputs) if w.isalpha() and w not in set(stopwords.words('english'))]
     return tokenizer.convert_tokens_to_ids(tokens)
 
 
-def find_filters(query, model, tokenizer, device, k=500):
+def find_sims(query, model, tokenizer, device, k=500):
     words = [w for w in tokenizer.vocab if w.isalpha() and w not in set(stopwords.words('english'))]
     inputs = tokenizer.batch_encode_plus([[query, w] for w in words], padding=True)
     all_input_ids = torch.tensor(inputs['input_ids'], device=device)
@@ -38,8 +38,8 @@ def find_filters(query, model, tokenizer, device, k=500):
 
     all_scores = torch.cat(all_scores)
     _, top_indices = torch.topk(all_scores, k)
-    filters = set([words[i.item()] for i in top_indices])
-    return [w for w in filters if w.isalpha()]
+    sims = set([words[i.item()] for i in top_indices])
+    return [w for w in sims if w.isalpha()]
 
 
 def logits_perturbation(
@@ -79,20 +79,20 @@ def logits_perturbation(
 def pairwise_anchor_trigger(query, anchor, raw_passage, model, tokenizer, device, lm_model=None, args=None,
                             nsp_model=None):
     input_mask = torch.zeros(tokenizer.vocab_size, device=device)
-    filters = find_filters(query, model, tokenizer, device, k=args.num_filters)
-    best_ids = get_inputs_filter_ids(anchor, tokenizer)
+    sims = find_sims(query, model, tokenizer, device, k=args.num_sims)
+    best_ids = get_inputs_sim_ids(anchor, tokenizer)
     input_mask[best_ids] = 0.68
 
-    num_filters_ids = tokenizer.convert_tokens_to_ids(filters)
-    input_mask[num_filters_ids] = 0.68
+    num_sims_ids = tokenizer.convert_tokens_to_ids(sims)
+    input_mask[num_sims_ids] = 0.68
 
     input_mask[tokenizer.convert_tokens_to_ids(['.', '@', '='])] = -1e9
     unk_ids = tokenizer.encode('<unk>', add_special_tokens=False)
     input_mask[unk_ids] = -1e9
 
-    filter_ids = [tokenizer.vocab[w] for w in tokenizer.vocab if not w.isalnum()]
+    sim_ids = [tokenizer.vocab[w] for w in tokenizer.vocab if not w.isalnum()]
     first_mask = torch.zeros_like(input_mask)
-    first_mask[filter_ids] = -1e9
+    first_mask[sim_ids] = -1e9
 
     trigger_init = tokenizer.convert_tokens_to_ids([BOS_TOKEN])
     start_idx = 1
@@ -244,9 +244,9 @@ def pairwise_anchor_trigger(query, anchor, raw_passage, model, tokenizer, device
 
         # attack loss
         if args.nsp:
-            next_scores = next_clf_scores + args.lamba_1 * next_lm_scores - args.lamba_2 * next_nsp_scores
+            next_scores = next_clf_scores + args.lambda_1 * next_lm_scores - args.lambda_2 * next_nsp_scores
         else:
-            next_scores = next_clf_scores + args.lamba_1 * next_lm_scores
+            next_scores = next_clf_scores + args.lambda_1 * next_lm_scores
         next_scores += input_mask
 
         # re-organize to group the beam together
