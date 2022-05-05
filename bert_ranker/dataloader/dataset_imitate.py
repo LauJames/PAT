@@ -6,7 +6,6 @@ sys.path.insert(0, os.path.dirname(curdir))
 prodir = os.path.dirname(os.path.dirname(curdir))
 sys.path.insert(0, prodir)
 
-import numpy as np
 import pandas as pd
 import pickle as pkl
 from tqdm import tqdm
@@ -16,14 +15,15 @@ from transformers import BertTokenizerFast
 
 
 class Imitation_Dataset(object):
-    def __init__(self, tokenizer, random_seed=666, sample_config_tail='top_20_last_10'):
+    def __init__(self, tokenizer, victim='MiniLM', random_seed=666,
+                 sample_config_tail='top_20_last_10'):
         self.tokenizer = tokenizer
         self.random_seed = random_seed
         self.ms_folder_name = prodir + '/data/msmarco_passage'
         self.triples_from_runs_folder = self.ms_folder_name + '/triples_from_runs'
-        self.triples_from_runs_338_path = self.triples_from_runs_folder + '/tmp_runs_sampled_triples_text.csv'
 
         self.sample_config_tail = sample_config_tail
+        self.victim = victim
 
         self.triples_from_runs_bert_large = self.triples_from_runs_folder + '/bert_large_sampled_triples_text.{}.csv'.format(
             self.sample_config_tail)
@@ -38,12 +38,18 @@ class Imitation_Dataset(object):
         self.test_trec_mb_2014_path = prodir + '/data/trec_mb_2014/trec_mb_2014.pkl'
 
     def _load_from_triples_to_pairwise(self):
-        pkl_path = self.ms_folder_name + '/triples_from_runs/minilm_l12_sampled_triples_text.{}.pkl'.format(
-            self.sample_config_tail)
-        # pkl_path = self.ms_folder_name + '/triples_from_runs/bert_large_sampled_triples_text.{}.pkl'.format(self.sample_config_tail)
+        if self.victim == 'MiniLM':
+            pkl_path = self.ms_folder_name + '/triples_from_runs/minilm_l12_sampled_triples_text.{}.pkl'.format(
+                self.sample_config_tail)
+            triples_from_runs = self.triples_from_runs_minilm_l12_v2
+        elif self.victim == 'bert_large':
+            pkl_path = self.ms_folder_name + '/triples_from_runs/bert_large_sampled_triples_text.{}.pkl'.format(
+                self.sample_config_tail)
+            triples_from_runs = self.triples_from_runs_bert_large
+        else:
+            raise ValueError("Wrong victim model")
         print("Load data from {}".format(pkl_path))
         if not os.path.exists(pkl_path):
-            triples_from_runs = self.triples_from_runs_minilm_l12_v2
             print("{} not exists.\n Load pairwise sample from the {} ...".format(pkl_path, triples_from_runs))
             train_df = pd.read_csv(triples_from_runs, sep='\t', names=["query", "pos", "neg"])
             train_instances = []
@@ -123,7 +129,6 @@ class Imitation_Dataset(object):
             batch_encoding_pos = self.tokenizer([(e[0], e[1]) for e in tmp_examples],
                                                 max_length=max_seq_len, padding="max_length", truncation=True,
                                                 return_tensors='pt')
-
             yield batch_encoding_pos, tmp_labels, tmp_qids, tmp_pids
 
 
@@ -135,3 +140,4 @@ if __name__ == "__main__":
         cnt += 1
         if cnt > 2:
             break
+

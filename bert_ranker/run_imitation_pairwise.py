@@ -42,7 +42,7 @@ def main():
                         help="Run validation every <validate_every_steps> steps.")
     parser.add_argument("--num_validation_batches", default=-1, type=int,
                         help="Run validation for a sample of <num_validation_batches>. To run on all instances use -1.")
-    parser.add_argument("--train_batch_size", default=128, type=int,
+    parser.add_argument("--train_batch_size", default=256, type=int,
                         help="Training batch size.")
     parser.add_argument("--val_batch_size", default=1024, type=int,
                         help="Validation and test batch size.")
@@ -56,7 +56,7 @@ def main():
     # Model hyperparameters
     parser.add_argument("--transformer_model", default="bert-base-uncased", type=str, required=False,
                         help="Bert model to use (default = bert-base-cased).")
-    parser.add_argument("--max_seq_len", default=256, type=int, required=False,
+    parser.add_argument("--max_seq_len", default=128, type=int, required=False,
                         help="Maximum sequence length for the inputs.")
     parser.add_argument("--lr", default=7e-6, type=float, required=False,
                         help="Learning rate.")
@@ -70,6 +70,8 @@ def main():
                         help="Loss function (default is 'cross-entropy').")
     parser.add_argument("--smoothing", default=0.1, type=float, required=False,
                         help="Smoothing hyperparameter used only if loss_function is label-smoothing-cross-entropy.")
+    parser.add_argument("--sample_config", default="top_25_last_4", required=True)
+    parser.add_argument("--imitate_model_name", default="MiniLM", required=True)
 
     args = parser.parse_args()
     args.model_name = 'pairwise-BERT-ranker'
@@ -78,15 +80,28 @@ def main():
     logger.setLevel(logging.INFO)
     formatter = logging.Formatter('%(asctime)s - %(message)s')
 
-    # sample_config_tail = 'top_10_last_35'
-    # sample_config_tail = 'top_15_last_19'
-    # sample_config_tail = 'top_16_last_17'
-    sample_config_tail = 'top_20_last_10'
-    # sample_config_tail = 'top_25_last_4'
-    # sample_config_tail = 'top_15_last_59'
-    # sample_config_tail = 'top_16_last_55'
-    # sample_config_tail = 'top_20_last_40'
-    # sample_config_tail = 'top_25_last_28'
+    tokenizer = BertTokenizerFast.from_pretrained(args.transformer_model)
+
+    # Instantiate transformer model to be used
+    model = pairwise_bert.BertForPairwiseLearning.from_pretrained(args.transformer_model,
+                                                                  loss_function=args.loss_function,
+                                                                  smoothing=args.smoothing)
+
+    data_obj = Imitation_Dataset(tokenizer=tokenizer, sample_config_tail=args.sample_config, victim=args.imitate_model_name)
+
+    # load fine-tuned pairwise ranker
+    start_model_path = curdir + '/saved_models/' + model.__class__.__name__ + '.' + args.transformer_model + '.dl714.ms381.pth'
+    # start_model_path = curdir + '/saved_models/' + model.__class__.__name__ + '.nq.' + args.transformer_model + '.pth'
+
+    # model_path = curdir + '/saved_models/Imitation.distilbert.cat.further_train.' + model.__class__.__name__ + '.' + args.transformer_model + '.pth'
+    # model_path = curdir + '/saved_models/Imitation.bert_large.straight.' + model.__class__.__name__ + '.' + args.transformer_model + '.pth'
+    # model_path = curdir + '/saved_models/Imitation.MiniLM.L12.v2.' + model.__class__.__name__ + '.' + args.transformer_model + '.pth'
+    # model_path = curdir + '/saved_models/Imitation.bert_large.dl714.further_train.' + model.__class__.__name__ + '.' + args.transformer_model + '.pth'
+    # model_path = curdir + '/saved_models/Imitation.MiniLM.straight.' + model.__class__.__name__ + '.' + sample_config_tail + '.' + args.transformer_model + '.pth'
+    # model_path = curdir + '/saved_models/Imitation.MiniLM.further.' + model.__class__.__name__ + '.' + sample_config_tail + '.' + args.transformer_model + '.pth'
+    # model_path = curdir + '/saved_models/Imitation.MiniLM.further.nq.' + model.__class__.__name__ + '.' + sample_config_tail + '.' + args.transformer_model + '.pth'
+    # model_path = curdir + '/saved_models/Imitation.' + imitate_model_name + '.further.nq.' + model.__class__.__name__ + '.' + sample_config_tail + '.' + args.transformer_model + '.pth'
+    model_path = curdir + '/saved_models/Imitation.' + imitate_model_name + '.further.' + model.__class__.__name__ + '.' + sample_config_tail + '.' + args.transformer_model + '.pth'
 
     # log directory
     log_dir = curdir + '/logs'
@@ -115,22 +130,6 @@ def main():
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed_all(args.seed)
 
-    tokenizer = BertTokenizerFast.from_pretrained(args.transformer_model)
-
-    # Instantiate transformer model to be used
-    model = pairwise_bert.BertForPairwiseLearning.from_pretrained(args.transformer_model,
-                                                                  loss_function=args.loss_function,
-                                                                  smoothing=args.smoothing)
-
-    data_obj = Imitation_Dataset(tokenizer=tokenizer, sample_config_tail=sample_config_tail)
-
-    # load fine-tuned pairwise ranker
-    start_model_path = curdir + '/saved_models/' + model.__class__.__name__ + '.' + args.transformer_model + '.pth'
-
-    # model_path = curdir + '/saved_models/Imitation.bert_large.straight.' + model.__class__.__name__ + '.' + args.transformer_model + '.pth'
-    # model_path = curdir + '/saved_models/Imitation.bert_large.further.' + model.__class__.__name__ + '.' + args.transformer_model + '.pth'
-    # model_path = curdir + '/saved_models/Imitation.MiniLM.straight.' + model.__class__.__name__ + '.' + sample_config_tail + '.' + args.transformer_model + '.pth'
-    model_path = curdir + '/saved_models/Imitation.MiniLM.further.' + model.__class__.__name__ + '.' + sample_config_tail + '.' + args.transformer_model + '.pth'
 
     trainer = Trainer(
         model=model,

@@ -100,6 +100,8 @@ def main():
         writer_train = SummaryWriter(tensorboard_dir + 'train_pseudo')
     elif args.mode == 'train_pseudo_same':
         writer_train = SummaryWriter(tensorboard_dir + 'train_pseudo_same')
+    elif args.mode == 'train_nq':
+        writer_train = SummaryWriter(tensorboard_dir + 'train_nq')
     else:
         writer_train = None
 
@@ -125,6 +127,8 @@ def main():
         model_path = curdir + '/saved_models/' + model.__class__.__name__ + '.pseudo.' + args.transformer_model + '.pth'
     elif args.mode in ['train_pseudo_same', 'eval_pseudo_same_full_dev1000', 'dl2019_same_pseudo']:
         model_path = curdir + '/saved_models/' + model.__class__.__name__ + '.pseudo.same.' + args.transformer_model + '.pth'
+    elif args.mode in ['train_nq']:
+        model_path = curdir + '/saved_models/' + model.__class__.__name__ + '.nq.' + args.transformer_model + '.pth'
     else:
         model_path = curdir + '/saved_models/' + model.__class__.__name__ + '.' + args.transformer_model + '.pth'
 
@@ -140,7 +144,7 @@ def main():
         run_id=args.run_id,
         logger=logger)
 
-    if args.mode in ['train', 'train_pseudo', 'train_pseudo_same']:
+    if args.mode in ['train', 'train_nq', 'train_pseudo', 'train_pseudo_same']:
         trainer.train_ranker(mode=args.mode)
         writer_train.close()
     else:

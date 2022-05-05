@@ -194,7 +194,7 @@ class Trainer(object):
                         else:
                             early_stop_cnt += 1
 
-                if early_stop_cnt > 3:
+                if early_stop_cnt > 2:
                     print("early stop this epoch")
                     self.logger.info("early stop this epoch")
                     break

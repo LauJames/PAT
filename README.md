@@ -1,8 +1,8 @@
 # PAT
-Core implementation of Paper: "Imitation Adversarial Attacks for Black-box Neural Ranking Models."
+Core implementation of Paper: "Order-Disorder: Imitation Adversarial Attacks for Black-box Neural Ranking Models".
 
 # Requirements
-- Python 3.6 or higher
+- Python 3.8
 - Pytorch==1.10.0
 - transformers==4.6.1
 - sentence-transformers==2.1.0
@@ -21,42 +21,64 @@ Core implementation of Paper: "Imitation Adversarial Attacks for Black-box Neura
 - [MSMARCO Passage Ranking](https://microsoft.github.io/msmarco/)
 - [TREC Deep Learning Track 2019](https://microsoft.github.io/msmarco/TREC-Deep-Learning-2019)
 - [TREC Microblog Track](https://github.com/jinfengr/neural-tweet-search)
+- [Natural Question](https://github.com/facebookresearch/DPR)
 
 ## Model Imitation
 - Data Processing
   Build Dev data into pickle file to speedup the evaluation.
   1. MSMARCO Passage Ranking
-  `python ./bert_ranker/dataloader/preprocess_pr.py`
+  ```shell
+  python ./bert_ranker/dataloader/preprocess_pr.py
+  ```
   2. TREC DL2019
-  `python ./bert_ranker/dataloader/preprocess_trec_dl.py`
+  ```shell
+  python ./bert_ranker/dataloader/preprocess_trec_dl.py
+  ```
   3. TREC MB2014
-  `python ./bert_ranker/dataloader/preprocess_mb.py`
+  ```shell
+  python ./bert_ranker/dataloader/preprocess_mb.py
+  ```
+  4. Natural Question
+  ```shell
+  python ./bert_ranker/dataloader.preprocess_nq.py
+  ```
 
 - Train Pairwise-BERT Ranker from scratch
-  `python ./bert_ranker/run_pairwise_ranker.py`
+  ```shell
+  python ./bert_ranker/run_pairwise_ranker.py
+  ```
 
 - Get runs file (TREC Format) from the publicly available ranking model.
-  `python ./bert_ranker/dev_public_bert_ranker.py`
+  ```shell
+  python ./bert_ranker/dev_public_bert_ranker.py
+  ```
 
 - Sample training data from runs file of public model to train imitation model.
- `python ./bert_ranker/dataloader/sample_runs.py`
+  ```shell
+  python ./bert_ranker/dataloader/sample_runs.py
+  ```
 
 - Train imitation model using sampled data.
- `python ./bert_ranker/run_imitation_pairwise.py`
+  ```shell
+  python ./bert_ranker/run_imitation_pairwise.py
+  ```
+
 
 - Evaluate the similarity between imitation model and victim model using runs file.
- `python imitation_agreement.py
+  ```shell
+  python imitation_agreement.py
+  ```
 
 - Evaluate ranking performance using runs file
   Note that the evaluation metrics during training and development are not consistent with the official evaluation method.
-  We get the standard ranking performance by official trec tools, which are implemented in trec_eval_tools.py
+  We get the standard ranking performance by official trec tools, which are implemented in `trec_eval_tools.py`
 
-## Text Ranking Attack Via PAT
+## Text ranking attack via PAT
 
-- The data preprocessing is implemented in ./adv_ir/data_utils.py
+- The data preprocessing is implemented in `./adv_ir/data_utils.py`
   We need extract the query, query id, scores (imitation model), and target candidate passages from runs file.
 
-- The Pairwise Anchor-based Trigger generation is implemented in ./adv_ir/attack_methods.py
+- The Pairwise Anchor-based Trigger generation is implemented in `./adv_ir/attack_methods.py`
   function name: gen_adversarial_trigger_pair_passage()
 
 - For generating adversarial triggers for ranking attack.

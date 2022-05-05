@@ -78,5 +78,6 @@ class BertForPairwiseLearning(BertPreTrainedModel):
             loss = self.loss_fct(logits_diff.view(-1, self.num_labels), labels.view(-1))
 
         # for label, we only consider the first part
+        # output = (logits_pos,) + outputs_pos[2:]
         output = (logits_pos, logits_diff)
         return ((loss,) + output) if loss is not None else output

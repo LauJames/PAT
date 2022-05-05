@@ -14,21 +14,15 @@ ranker_results_dir = prodir + '/bert_ranker/results/runs'
 trec_dl_data_folder = prodir + '/data/trec_dl_2019'
 
 
-def pick_target_query_doc_and_best_scores(target_name='pointwise',
+def pick_target_query_doc_and_best_scores(target_name='imitate.v2',
                                           data_name='dl',
-                                          top_k=10,
-                                          least_num=10):
+                                          top_k=5,
+                                          least_num=5):
     if data_name == 'dl':
         if target_name == 'imitate.v2':
-            run_file = ranker_results_dir + '/runs.bert-base-uncased.pairwise.triples.dl2019_imitation_MiniLM.csv'
+            run_file = ranker_results_dir + '/runs.bert-base-uncased.pairwise.triples.dl2019_MiniLM_further.nq.csv'
         elif target_name == 'imitate.v1':
-            run_file = ranker_results_dir + '/runs.bert-base-uncased.pairwise.triples.dl2019_imitation_bert_large.csv'
-        elif target_name == 'pairwise.pseudo':
-            run_file = ranker_results_dir + '/runs/runs.bert-base-uncased.pairwise.triples.pseudo.csv'
-        elif target_name == 'pairwise.wo.imitation':
-            run_file = ranker_results_dir + '/runs.bert-base-uncased.pairwise.triples.dl2019.csv'
-        elif target_name == 'pointwise':
-            run_file = ranker_results_dir + '/runs.bert-base-uncased.pointwise.triples.2M.dl2019.csv'
+            run_file = ranker_results_dir + '/runs.bert-base-uncased.pairwise.triples.dl2019_bert_large_further.nq.csv'
         elif target_name == 'mini':
             run_file = ranker_results_dir + '/runs.ms-marco-MiniLM-L-12-v2.public.bert.msmarco.dl2019.csv'
         elif target_name == 'large':
@@ -59,7 +53,6 @@ def pick_target_query_doc_and_best_scores(target_name='pointwise',
             all_qid_pid_dict[qid].append(pid)
 
     best_query_score = {}
-    # get best scores
     all_qid_list = list(target_q_dict.keys())
     for qid in all_qid_list:
         if len(target_q_dict[qid]) < 100:
@@ -137,10 +130,10 @@ def prepare_data_and_scores(target_name='mini',
 
 def get_query_passage_by_qid_rank(qid, rank):
     target_q_passage, query_scores, best_query_sent, queries, passages_dict = prepare_data_and_scores(
-        target_name='pairwise.v2',
+        target_name='imitate.v2',
         data_name='dl',
-        top_k=10,
-        least_num=10)
+        top_k=5,
+        least_num=5)
     query = queries[qid]
     for did in target_q_passage[qid]:
         old_rank, _ = target_q_passage[qid][did]
@@ -152,7 +145,7 @@ def get_query_passage_by_qid_rank(qid, rank):
 
 
 if __name__ == "__main__":
-    prepare_data_and_scores(target_name='pairwise.v2', data_name='dl', top_k=10, least_num=10)
+    prepare_data_and_scores(target_name='imitate.v2', data_name='dl', top_k=5, least_num=5)
 
 
 

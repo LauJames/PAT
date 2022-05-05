@@ -16,11 +16,10 @@ runs_data_folder = prodir + '/bert_ranker/results/runs'
 runs_bert_large = runs_data_folder + '/runs.bert-large-uncased.public.bert.msmarco.eval_full_dev1000.csv'
 runs_MiniLM_L_12 = runs_data_folder + '/runs.ms-marco-MiniLM-L-12-v2.public.bert.msmarco.eval_full_dev1000.csv'
 
-random_seed = 777
+random_seed = 666
 
 
-# used top 20 last 10
-def sample_from_dev_runs(run_path, save_pre_fix, top_n=20, last_sample=10):
+def sample_from_dev_runs(run_path, save_pre_fix, top_n=25, last_sample=4):
     relevant_pairs_dict = collections.defaultdict(list)
     with open(run_path, 'r') as f:
         for line in f:
@@ -39,7 +38,7 @@ def sample_from_dev_runs(run_path, save_pre_fix, top_n=20, last_sample=10):
             for j in range(i + 1, tmp_top_n):
                 neg_did = top_n_dids[j]
                 sampled_triples_ids.append((qid, pos_did, neg_did))
-            # for top n corresponding random negative sampling from another 990
+            # for top n corresponding random negative sampling from another
             if len(last_dids) < last_sample:
                 selected_last_neg = last_dids
             else:
