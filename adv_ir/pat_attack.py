@@ -1,3 +1,7 @@
+"""
+@Reference: https://github.com/csong27/collision-bert/blob/master/collision_retrieval.py
+"""
+
 import sys
 import os
 

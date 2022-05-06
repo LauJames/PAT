@@ -75,11 +75,10 @@ Core implementation of Paper: "Order-Disorder: Imitation Adversarial Attacks for
 
 ## Text ranking attack via PAT
 
-- The data preprocessing is implemented in `./adv_ir/data_utils.py`
+- The data preprocessing is implemented in `./adv_ir/data_utils.py`.
   We need extract the query, query id, scores (imitation model), and target candidate passages from runs file.
 
-- The Pairwise Anchor-based Trigger generation is implemented in `./adv_ir/attack_methods.py`
-  function name: gen_adversarial_trigger_pair_passage()
+- The Pairwise Anchor-based Trigger generation is implemented in `./adv_ir/attack_methods.py` function name: pairwise_anchor_trigger()
 
 - For generating adversarial triggers for ranking attack.
   ```shell
