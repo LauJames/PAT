@@ -27,6 +27,8 @@ Core implementation of Paper: "Order-Disorder: Imitation Adversarial Attacks for
 - Data Processing
   Build Dev data into pickle file to speedup the evaluation.
   1. MSMARCO Passage Ranking
+  Download [MSMARCO Passage Ranking](https://microsoft.github.io/msmarco/) dataset.
+  Download [sub small dev set of MSMARCO](https://drive.google.com/file/d/1ygWbpoCtznr-4OiN5BRcgC6Hxby9xyb4/view?usp=share_link), used for accerlating evaluation during training process
   ```shell
   python ./bert_ranker/dataloader/preprocess_pr.py
   ```
@@ -52,6 +54,10 @@ Core implementation of Paper: "Order-Disorder: Imitation Adversarial Attacks for
   ```shell
   python ./bert_ranker/dev_public_bert_ranker.py
   ```
+
+  > --mode determines which dataset to evaluate on
+  > --transformer_model determines which open source model to verify on. The default setting is "bert-large-uncased". There is an option, and we will also use the verification result later, which sets as "ms-marco-MiniLM-L-12-v2".
+
 
 - Sample training data from runs file of public model to train imitation model.
   ```shell

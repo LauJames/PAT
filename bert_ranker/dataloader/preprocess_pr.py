@@ -322,11 +322,17 @@ def gen_dev1000_data(data_path, num_eval_docs=1000, add_fake=True):
 
 
 if __name__ == "__main__":
-
+    # build dev set, used for evaluating final model
     qrels_path = data_folder + '/qrels.dev.tsv'
     queries_path = data_folder + '/collection_queries/queries.dev.small.tsv'
 
     set_name = 'run_bm25'
     runs_path = data_folder + '/runs_from_public/run.bm25.dev.small.tsv'
+    build_dev_data_from_qrel_run_queries(qrels_path, runs_path, queries_path, set_name)
+    gen_dev_input_from_csv_to_pkl(set_name)
+
+    # build sub small dev set, used for accerlating evaluation during training process
+    set_name = 'run_sub_small'
+    runs_path = data_folder + '/runs_from_public/run.dev.sub_small.tsv'
     build_dev_data_from_qrel_run_queries(qrels_path, runs_path, queries_path, set_name)
     gen_dev_input_from_csv_to_pkl(set_name)
