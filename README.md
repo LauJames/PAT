@@ -1,5 +1,5 @@
 # PAT
-Core implementation of Paper: "Order-Disorder: Imitation Adversarial Attacks for Black-box Neural Ranking Models".
+Core implementation of Paper: "[Order-Disorder: Imitation Adversarial Attacks for Black-box Neural Ranking Models](https://arxiv.org/abs/2209.06506)".
 
 # Requirements
 - Python 3.8
@@ -96,3 +96,14 @@ Core implementation of Paper: "Order-Disorder: Imitation Adversarial Attacks for
   ```shell
   python pat_attack.py --target=mini --imitation_model=imitate.v2  --nsp --lamba_1=0.6 --lambda_2=0.1 --num_beams=10 --topk=128 --mode=test
   ```
+ 
+ # Reference
+```
+@inproceedings{liu2022order,
+  title={Order-Disorder: Imitation Adversarial Attacks for Black-box Neural Ranking Models},
+  author={Liu, Jiawei and Kang, Yangyang and Tang, Di and Song, Kaisong and Sun, Changlong and Wang, Xiaofeng and Lu, Wei and Liu, Xiaozhong},
+  booktitle={Proceedings of the 2022 ACM SIGSAC Conference on Computer and Communications Security},
+  pages={2025--2039},
+  year={2022}
+}
+```
